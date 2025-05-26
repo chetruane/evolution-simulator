@@ -49,7 +49,7 @@
         <div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2">
             <div class="flex items-center space-x-2">
                 <label for="speedSlider" class="text-sm stat-label whitespace-nowrap">Speed:</label>
-                <input type="range" id="speedSlider" min="1" max="15" value="1" step="0.5" class="w-full accent-blue-600 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer">
+                <input type="range" id="speedSlider" min="1" max="16" value="1" step="1" class="w-full accent-blue-600 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer">
                 <span id="speedValue" class="text-sm stat-value font-semibold w-12 text-right">1.0x</span>
             </div>
             <div class="flex items-center space-x-2">
@@ -113,8 +113,9 @@
         const EVOLUTION_CHANCE_ON_DUPLICATION = 0.025;
         const GENE_MUTATION_STRENGTH = 0.5;
         const MINOR_HUE_SHIFT_STRENGTH = 0.4;
-        const MAX_GENES = 17;
-        const INITIAL_GENE_COUNT = MAX_GENES;
+        // MAX_GENES updated to include new genes
+        const MAX_GENES = 20; // Increased for new Starvation gene
+        const INITIAL_GENE_COUNT = MAX_GENES; // Should match MAX_GENES
         const BASE_SPEED = 0.001;
         const FLAGELLA_SPEED_BONUS = 25; // Speed bonus per effective flagella unit
         const HOSTILITY_THRESHOLD = 0.5;
@@ -147,7 +148,7 @@
         const NUM_SALT_REGIONS = 1;
         const SALT_REGION_LIFESPAN_REDUCTION = 0.3;
         const SALT_REGION_MUTATION_BOOST = 0.3;
-        const SALT_REGION_TINT_COLOR = 'rgba(255, 255, 55, 0.07)';
+        const SALT_REGION_TINT_COLOR = 'rgba(255, 255, 95, 0.07)';
 
         // Plasmodium Parameters
         const PLASMODIUM_EXPRESSION_THRESHOLD = 0.7;
@@ -179,6 +180,17 @@
         const DWELLING_FORCE = 0.04;
         const DWELLING_REACH_THRESHOLD = 10;
 
+        // NEW GENE PARAMETERS
+        const MYCELIUM_THRESHOLD = 0.65; // Gene value above this enables mycelium behavior
+        const PATHFINDING_THRESHOLD = 0.7; // Gene value above this enables pathfinding behavior
+        const WALL_AVOIDANCE_FORCE = 0.08; // How strongly to avoid walls when fleeing
+        const WALL_STEERING_FORCE = 0.06; // How strongly to steer around walls when hunting/scavenging
+        const WALL_DETECTION_RANGE_MULTIPLIER = 2.5; // Multiplier of organism radius for wall detection
+        const STARVATION_THRESHOLD_LIFESPAN = 20; // Lifespan remaining below which starvation kicks in
+        const STARVATION_GENE_ACTIVATION_THRESHOLD = 0.3; // Gene value above this enables starvation override
+        const DRAG_FACTOR = 0.95; // Multiplier for velocity to simulate drag (0.95 means 5% velocity loss per tick)
+
+
         // Gene Indices & Names
         const GENE_HUE = 0; const GENE_BASE_SIZE = 1; const GENE_DUP_RATE = 2;
         const GENE_FLAGELLA = 3; const GENE_HOSTILITY = 4; const GENE_SIGHT_RANGE = 5;
@@ -187,10 +199,15 @@
         const GENE_PLASMODIUM = 12; const GENE_WALL_ATTRACTION = 13;
         const GENE_HERD_MENTALITY = 14; const GENE_EGG_LAYING = 15;
         const GENE_DWELLING = 16;
+        const GENE_MYCELIUM = 17;
+        const GENE_PATHFINDING = 18;
+        const GENE_STARVATION = 19; // New gene index
+
         const GENE_NAMES = [
             "Hue", "BaseSize", "Dup.Rate", "Flagella", "Hostility", "SightRange",
             "Fear", "Predator", "Complexity", "Scavenger", "SaltTolerance", "SaltAvoidance",
-            "Plasmodium", "WallAttract", "HerdMental", "EggLayer", "Dwelling"
+            "Plasmodium", "WallAttract", "HerdMental", "EggLayer", "Dwelling",
+            "Mycelium", "Pathfinding", "Starvation" // New gene name
         ];
 
         // Gene Thresholds for Modal Display
@@ -205,7 +222,11 @@
             [GENE_HERD_MENTALITY]: HERD_MENTALITY_THRESHOLD,
             [GENE_EGG_LAYING]: EGG_LAYING_THRESHOLD,
             [GENE_DWELLING]: DWELLING_GENE_THRESHOLD,
-            [GENE_FLAGELLA]: 0.01 // Special case: considered "active" if > 0.01 for speed bonus
+            [GENE_FLAGELLA]: 0.01, // Special case: considered "active" if > 0.01 for speed bonus
+            // NEW GENE THRESHOLDS
+            [GENE_MYCELIUM]: MYCELIUM_THRESHOLD,
+            [GENE_PATHFINDING]: PATHFINDING_THRESHOLD,
+            [GENE_STARVATION]: STARVATION_GENE_ACTIVATION_THRESHOLD // Threshold for display
         };
 
 
@@ -230,6 +251,7 @@
         let viewOffsetX = 0;
         let viewOffsetY = 0;
         let worldWidth, worldHeight;
+        let myceliumConnections = new Set(); // Stores stringified pairs like "id1-id2" for drawing
 
         function resizeCanvas() {
             const parent = canvas.parentElement;
@@ -247,8 +269,10 @@
         }
         
         function createOrganism(x, y, genesOverride, parentBirthX, parentBirthY) {
-            const defaultGenes = Array(INITIAL_GENE_COUNT).fill(0).map(() => Math.random() * 0.3 + 0.1);
+            // Default genes are now of MAX_GENES length
+            const defaultGenes = Array(MAX_GENES).fill(0).map(() => Math.random() * 0.3 + 0.1);
             const newGenes = genesOverride ? [...genesOverride] : defaultGenes;
+            // Ensure newGenes array has MAX_GENES length, filling with random if shorter
             while (newGenes.length < MAX_GENES) { newGenes.push(Math.random() * 0.3 + 0.1); }
             
             const organism = {
@@ -270,6 +294,9 @@
                 seeksHerd: false, herdDrive: 0,
                 isEggLayer: false, isEgg: false, eggTimer: 0,
                 canDwelling: false, isDwelling: false, dwellingGeneValue: 0,
+                // New gene properties
+                isMyceliumActive: false,
+                canPathfind: false,
             };
             organism.cellCount = calculateCellCount(organism.genes);
             organism.initialTimeToLive = LIFESPAN_PER_CELLCOUNT_SECONDS * organism.cellCount;
@@ -293,6 +320,9 @@
                 organism.plasmodiumEffectRadius = 0;
                 organism.canDwelling = false;
                 organism.isDwelling = false;
+                // New gene properties for eggs
+                organism.isMyceliumActive = false;
+                organism.canPathfind = false;
                 return; 
             }
 
@@ -338,6 +368,12 @@
 
             organism.dwellingGeneValue = g[GENE_DWELLING] || 0;
             organism.canDwelling = organism.dwellingGeneValue > DWELLING_GENE_THRESHOLD;
+
+            // NEW GENE INTERPRETATION
+            organism.isMyceliumActive = (g[GENE_MYCELIUM] || 0) > MYCELIUM_THRESHOLD;
+            // Pathfinding requires sight to be effective
+            organism.canPathfind = (g[GENE_PATHFINDING] || 0) > PATHFINDING_THRESHOLD && organism.sightRange > 0;
+            // Starvation gene doesn't directly change organism properties here, but influences behavior later.
         }
 
         function duplicateOrganism(parent, offspringX, offspringY, isInSaltRegion) {
@@ -348,41 +384,72 @@
                 currentEvolutionChance += SALT_REGION_MUTATION_BOOST * (1 - (parent.saltToleranceFactor || 0));
             }
 
+            let primaryMutationOccurred = false; // Flag to track if a primary mutation happened
             let mutatedNonHueGene = false;
+
+            // Primary mutation attempt
             if (Math.random() < currentEvolutionChance) {
                 totalEvolutions++;
+                primaryMutationOccurred = true;
                 let geneIndexToMutate;
                 if (MAX_GENES > 1) {
                     do { geneIndexToMutate = Math.floor(Math.random() * MAX_GENES); } while (geneIndexToMutate === GENE_HUE);
                 } else {
-                    geneIndexToMutate = 0; 
+                    geneIndexToMutate = 0;
                 }
 
                 const oldValue = newGenes[geneIndexToMutate];
                 newGenes[geneIndexToMutate] += (Math.random() - 0.5) * GENE_MUTATION_STRENGTH;
                 if (geneIndexToMutate === GENE_COMPLEXITY) { newGenes[geneIndexToMutate] = Math.max(0, newGenes[geneIndexToMutate]); }
                 else { newGenes[geneIndexToMutate] = Math.max(0, Math.min(1, newGenes[geneIndexToMutate])); }
-                
+
                 if (newGenes[geneIndexToMutate] !== oldValue) {
                     mutatedNonHueGene = true;
                 }
             }
-            
+
+            // Secondary mutation attempt (1/2 chance if primary mutation occurred)
+            if (primaryMutationOccurred && Math.random() < (1/2)) {
+                totalEvolutions++; // Count as another evolution
+                let geneIndexToMutate;
+                // Ensure the secondary mutation isn't the same gene as the primary, unless only one gene exists
+                if (MAX_GENES > 1) {
+                    // This loop ensures a different gene is mutated for the secondary mutation,
+                    // or if only two genes, it could be the hue gene if the first wasn't
+                    let initialGeneToAvoid = geneIndexToMutate; // The gene mutated in the primary mutation
+                    do {
+                        geneIndexToMutate = Math.floor(Math.random() * MAX_GENES);
+                    } while (MAX_GENES > 1 && geneIndexToMutate === initialGeneToAvoid); // Avoid mutating the same gene again if multiple genes exist
+                } else {
+                    geneIndexToMutate = 0; // Only one gene, so mutate it again
+                }
+
+
+                const oldValue = newGenes[geneIndexToMutate];
+                newGenes[geneIndexToMutate] += (Math.random() - 0.5) * GENE_MUTATION_STRENGTH;
+                if (geneIndexToMutate === GENE_COMPLEXITY) { newGenes[geneIndexToMutate] = Math.max(0, newGenes[geneIndexToMutate]); }
+                else { newGenes[geneIndexToMutate] = Math.max(0, Math.min(1, newGenes[geneIndexToMutate])); }
+
+                if (newGenes[geneIndexToMutate] !== oldValue) {
+                    mutatedNonHueGene = true; // Even if it's a hue mutation, this flags that *some* non-hue mutation occurred previously, which might be less relevant for the secondary mutation, but good to keep consistent.
+                }
+            }
+
             if (mutatedNonHueGene || (Math.random() < currentEvolutionChance && MAX_GENES > 0 && newGenes[GENE_HUE] !== undefined) ) {
-                 newGenes[GENE_HUE] = (newGenes[GENE_HUE] || 0) + (Math.random() - 0.5) * MINOR_HUE_SHIFT_STRENGTH;
-                 newGenes[GENE_HUE] = (newGenes[GENE_HUE] + 1) % 1;
+                newGenes[GENE_HUE] = (newGenes[GENE_HUE] || 0) + (Math.random() - 0.5) * MINOR_HUE_SHIFT_STRENGTH;
+                newGenes[GENE_HUE] = (newGenes[GENE_HUE] + 1) % 1;
             }
 
             const offspring = createOrganism(offspringX, offspringY, newGenes, parent.birthX, parent.birthY);
-            
+
             if (parent.isEggLayer) {
                 offspring.isEgg = true;
                 offspring.eggTimer = EGG_DURATION_SECONDS;
-                offspring.strength = EGG_STRENGTH; 
+                offspring.strength = EGG_STRENGTH;
                 offspring.birthX = offspringX;
                 offspring.birthY = offspringY;
             }
-            interpretGenes(offspring); 
+            interpretGenes(offspring);
             return offspring;
         }
 
@@ -416,7 +483,7 @@
             
             generateEnvironment();
             
-            const initialGenes = Array(MAX_GENES).fill(0);
+            const initialGenes = Array(MAX_GENES).fill(0); // Initialize with MAX_GENES length
             initialGenes[GENE_HUE]=Math.random(); initialGenes[GENE_BASE_SIZE]=0.1; initialGenes[GENE_DUP_RATE]=0.1; initialGenes[GENE_FLAGELLA]=0;
             initialGenes[GENE_HOSTILITY]=0.3; initialGenes[GENE_SIGHT_RANGE]=0; initialGenes[GENE_FEAR_FACTOR]=0.2; initialGenes[GENE_PREDATOR_DRIVE]=0.2;
             initialGenes[GENE_COMPLEXITY]=0; initialGenes[GENE_SCAVENGER]=0.2; 
@@ -425,6 +492,10 @@
             initialGenes[GENE_HERD_MENTALITY] = 0.3;
             initialGenes[GENE_EGG_LAYING] = 0.4;
             initialGenes[GENE_DWELLING] = 0.2;
+            // Initialize new genes
+            initialGenes[GENE_MYCELIUM] = 0.5;
+            initialGenes[GENE_PATHFINDING] = 0.2;
+            initialGenes[GENE_STARVATION] = 0.2; // Initialize starvation gene
 
             const initialOrganism = createOrganism(worldWidth/2, worldHeight/2, initialGenes);
             interpretGenes(initialOrganism); organisms.push(initialOrganism);
@@ -446,6 +517,65 @@
             const deltaTime = rawDeltaTime * gameSpeedMultiplier;
             simulationTime += deltaTime;
             const newOrganisms = []; const deadOrConsumedOrganismIds = new Set(); const consumedHuskIds = new Set();
+
+            // Clear mycelium connections for this frame
+            myceliumConnections.clear();
+
+            // Mycelium network processing - START
+            const visitedMyceliumOrgs = new Set();
+            organisms.forEach(org => {
+                if (org.isEgg || org.genes[GENE_MYCELIUM] < MYCELIUM_THRESHOLD || visitedMyceliumOrgs.has(org.id) || org.genes[GENE_FLAGELLA] >= 0.05) {
+                    return;
+                }
+
+                const network = [];
+                const queue = [org];
+                visitedMyceliumOrgs.add(org.id);
+
+                let head = 0;
+                while (head < queue.length) {
+                    const currentOrg = queue[head++];
+                    network.push(currentOrg);
+
+                    organisms.forEach(otherOrg => {
+                        // Check if the other organism is valid for network, not visited, and has mycelium gene
+                        if (otherOrg.isEgg || otherOrg.id === currentOrg.id || visitedMyceliumOrgs.has(otherOrg.id) || otherOrg.genes[GENE_MYCELIUM] < MYCELIUM_THRESHOLD || otherOrg.genes[GENE_FLAGELLA] >= 0.05) {
+                            return;
+                        }
+                        const dx = otherOrg.x - currentOrg.x;
+                        const dy = otherOrg.y - currentOrg.y;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+                        // Check if touching (or very close)
+                        if (distance < currentOrg.radius + otherOrg.radius + 12) { // Add a small buffer for "touching"
+                            queue.push(otherOrg);
+                            visitedMyceliumOrgs.add(otherOrg.id);
+                            // Add connection for drawing
+                            const connectionKey = [currentOrg.id, otherOrg.id].sort().join('-');
+                            myceliumConnections.add(connectionKey);
+                        }
+                    });
+                }
+
+                if (network.length > 1) { // Only process if it's a true network with more than one organism
+                    let totalLifespan = 0;
+                    network.forEach(nOrg => {
+                        totalLifespan += nOrg.timeToLive;
+                    });
+                    const averageLifespan = totalLifespan / network.length;
+
+                    network.forEach(nOrg => {
+                        if (nOrg.timeToLive < averageLifespan) {
+                            nOrg.timeToLive += deltaTime * 3;
+                        } else if (nOrg.timeToLive > averageLifespan) {
+                            nOrg.timeToLive -= deltaTime * 2;
+                        }
+                        // Ensure lifespan doesn't go below zero and doesn't exceed a reasonable cap (e.g., 3x initial TTL)
+                        nOrg.timeToLive = Math.max(0, Math.min(nOrg.timeToLive, nOrg.initialTimeToLive * 3));
+                    });
+                }
+            });
+            // Mycelium network processing - END
+
 
             foodDispensers.forEach(dispenser => { if (simulationTime >= dispenser.nextDispenseTime) { const angle = Math.random()*Math.PI*2; const husk={id:'husk_dispensed_'+Date.now()+'_'+Math.random(),x:dispenser.x,y:dispenser.y,radius:HUSK_DEFAULT_RADIUS,vx:Math.cos(angle)*FOOD_DISPENSER_HUSK_SPEED,vy:Math.sin(angle)*FOOD_DISPENSER_HUSK_SPEED,isDispensed:true,timeToLiveDispensed:60, cellCount:1}; husks.push(husk); dispenser.nextDispenseTime = simulationTime + (Math.random()*0.5+0.75)*FOOD_DISPENSER_RATE_SECONDS;}});
             husks.forEach(husk => { if (husk.isDispensed) { husk.x+=husk.vx*deltaTime; husk.y+=husk.vy*deltaTime; husk.vx*=0.98; husk.vy*=0.98; husk.timeToLiveDispensed-=deltaTime; if(husk.timeToLiveDispensed<=0){consumedHuskIds.add(husk.id);} if(husk.x-husk.radius<0||husk.x+husk.radius>worldWidth||husk.y-husk.radius<0||husk.y+husk.radius>worldHeight){consumedHuskIds.add(husk.id);} walls.forEach(wall=>{const closestPoint=getClosestPointOnLineSegment(husk.x,husk.y,wall.x1,wall.y1,wall.x2,wall.y2); const dx=husk.x-closestPoint.x; const dy=husk.y-closestPoint.y; const distSq=dx*dx+dy*dy; const totalRadiusSq=(husk.radius+wall.thickness/2)**2; if(distSq<totalRadiusSq){consumedHuskIds.add(husk.id);}});}});
@@ -508,67 +638,227 @@
                     }
                 }
                 
-                org.flees=false;org.hunts=false;org.isScavenging=false; org.isDwelling = false;
-                org.targetOrganism=null;org.targetHusk=null; org.targetWallPoint = null; org.targetHerdCenter = null; org.targetDwellingPoint = null;
-                interpretGenes(org); 
-                
-                let wantsToLeaveSalt=false; if(org.avoidsSalt&&currentSaltRegion&&(org.saltToleranceFactor<0.8)){wantsToLeaveSalt=true;const saltCenterX=currentSaltRegion.x+currentSaltRegion.width/2;const saltCenterY=currentSaltRegion.y+currentSaltRegion.height/2;org.vx+=(org.x-saltCenterX)*0.1;org.vy+=(org.y-saltCenterY)*0.1;}
-                
-                if(org.sightRange>0&&org.eatCooldown<=0&&!wantsToLeaveSalt){
-                    let bestPrey=null;let closestPreyDist=Infinity;let strongestThreat=null;let closestThreatDist=Infinity;
-                    let potentialScavengerThreat=null;let closestScavengerThreatDist=Infinity;let bestHuskTarget=null;let closestHuskDist=Infinity;
-                    let herdMembers = [];
+                // Determine if organism is starving
+                const isStarving = org.timeToLive < STARVATION_THRESHOLD_LIFESPAN && (org.genes[GENE_STARVATION] || 0) > STARVATION_GENE_ACTIVATION_THRESHOLD;
 
-                    organisms.forEach(other=>{if(org===other||deadOrConsumedOrganismIds.has(other.id)||other.isEgg)return;const dx=other.x-org.x;const dy=other.y-org.y;const distance=Math.sqrt(dx*dx+dy*dy)-other.radius-org.radius; if(distance<org.sightRange){ const canWinEngagement=(org.strength>other.strength)||(org.strength===other.strength&&org.radius>other.radius); const isEdibleByMulticell=!(org.cellCount>1&&other.cellCount===1&&other.radius<MIN_RADIUS_TO_EAT_BY_MULTICELLULAR); if((org.genes[GENE_PREDATOR_DRIVE]||0)>PREDATOR_DRIVE_THRESHOLD&&org.isHostile&&canWinEngagement&&isEdibleByMulticell&&JSON.stringify(org.genes)!==JSON.stringify(other.genes)){if(distance<closestPreyDist){closestPreyDist=distance;bestPrey=other;}} const isThreat=other.isHostile&&(other.strength>org.strength*1.5||(org.isHostile&&other.strength>org.strength&&!canWinEngagement)); if(((org.genes[GENE_FEAR_FACTOR]||0)>FEAR_FACTOR_THRESHOLD||(org.isHostile&&isThreat))&&isThreat){if(distance<closestThreatDist){closestThreatDist=distance;strongestThreat=other;}} if(org.isScavenger&&(org.genes[GENE_FEAR_FACTOR]||0)>(org.genes[GENE_SCAVENGER]||0)*0.5&&other.isHostile){if(distance<closestScavengerThreatDist){closestScavengerThreatDist=distance;potentialScavengerThreat=other;}} if (org.seeksHerd && distance < org.sightRange * HERD_DETECTION_RADIUS_MULTIPLIER) { const isDirectThreatOrPrey = (strongestThreat && strongestThreat.id === other.id) || (bestPrey && bestPrey.id === other.id); if (!isDirectThreatOrPrey) { herdMembers.push(other); } } }});
-                    if(org.isScavenger){husks.forEach(husk=>{if(consumedHuskIds.has(husk.id))return;const dx=husk.x-org.x;const dy=husk.y-org.y;const distance=Math.sqrt(dx*dx+dy*dy)-husk.radius-org.radius;if(distance<org.sightRange){if(distance<closestHuskDist && husk.radius <= org.radius){closestHuskDist=distance;bestHuskTarget=husk;}}});} 
-                    
-                    if(strongestThreat){org.flees=true;org.targetOrganism=strongestThreat;}
-                    else if(org.isScavenger&&potentialScavengerThreat){org.flees=true;org.targetOrganism=potentialScavengerThreat;}
-                    else if(bestPrey&&org.isHostile){org.hunts=true;org.targetOrganism=bestPrey;}
-                    else if(bestHuskTarget&&org.isScavenger&&!org.flees){org.isScavenging=true;org.targetHusk=bestHuskTarget;}
-                    else if (org.canDwelling && org.timeToLive > org.initialTimeToLive * DWELLING_LIFESPAN_SATISFACTION_RATIO && !org.flees && !org.hunts && !org.isScavenging) {
-                        const distToBirthSq = (org.x - org.birthX)**2 + (org.y - org.birthY)**2;
-                        if (distToBirthSq > (DWELLING_REACH_THRESHOLD * 2)**2) { 
-                             org.isDwelling = true;
-                             org.targetDwellingPoint = { x: org.birthX, y: org.birthY };
+                // Determine if organism wants to leave salt (this will influence targetVx/Vy directly)
+                let wantsToLeaveSalt = false;
+                if (org.avoidsSalt && currentSaltRegion && (org.saltToleranceFactor < 0.8)) {
+                    wantsToLeaveSalt = true;
+                    const saltCenterX = currentSaltRegion.x + currentSaltRegion.width / 2;
+                    const saltCenterY = currentSaltRegion.y + currentSaltRegion.height / 2;
+                    // Apply force to move away from salt center
+                    org.vx += (org.x - saltCenterX) * 0.1;
+                    org.vy += (org.y - saltCenterY) * 0.1;
+                }
+
+                // Reset targets and behaviors for this frame
+                org.flees = false;
+                org.hunts = false;
+                org.isScavenging = false;
+                org.isDwelling = false;
+                org.targetOrganism = null;
+                org.targetHusk = null;
+                org.targetWallPoint = null;
+                org.targetHerdCenter = null;
+                org.targetDwellingPoint = null;
+
+                // Re-interpret genes (important for any gene value changes, though unlikely for this frame)
+                interpretGenes(org);
+
+                // Find potential targets if organism has sight and is not on eating cooldown
+                let bestPrey = null;
+                let strongestThreat = null;
+                let potentialScavengerThreat = null;
+                let bestHuskTarget = null;
+                let herdMembers = [];
+
+                if (org.sightRange > 0 && org.eatCooldown <= 0) {
+                    organisms.forEach(other => {
+                        if (org === other || deadOrConsumedOrganismIds.has(other.id) || other.isEgg) return;
+                        const dx = other.x - org.x;
+                        const dy = other.y - org.y;
+                        const distance = Math.sqrt(dx * dx + dy * dy) - other.radius - org.radius;
+
+                        if (distance < org.sightRange) {
+                            const canWinEngagement = (org.strength > other.strength) || (org.strength === other.strength && org.radius > other.radius);
+                            const isEdibleByMulticell = !(org.cellCount > 1 && other.cellCount === 1 && other.radius < MIN_RADIUS_TO_EAT_BY_MULTICELLULAR);
+
+                            if ((org.genes[GENE_PREDATOR_DRIVE] || 0) > PREDATOR_DRIVE_THRESHOLD && org.isHostile && canWinEngagement && isEdibleByMulticell && JSON.stringify(org.genes) !== JSON.stringify(other.genes)) {
+                                if (bestPrey === null || distance < (Math.sqrt((bestPrey.x - org.x)**2 + (bestPrey.y - org.y)**2) - bestPrey.radius - org.radius)) {
+                                    bestPrey = other;
+                                }
+                            }
+
+                            const isThreat = other.isHostile && (other.strength > org.strength * 1.5 || (org.isHostile && other.strength > org.strength && !canWinEngagement));
+                            if (((org.genes[GENE_FEAR_FACTOR] || 0) > FEAR_FACTOR_THRESHOLD || (org.isHostile && isThreat)) && isThreat) {
+                                if (strongestThreat === null || distance < (Math.sqrt((strongestThreat.x - org.x)**2 + (strongestThreat.y - org.y)**2) - strongestThreat.radius - org.radius)) {
+                                    strongestThreat = other;
+                                }
+                            }
+
+                            // Check for potential scavenger threat (hostile organism that could threaten a scavenger)
+                            if (org.isScavenger && (org.genes[GENE_FEAR_FACTOR] || 0) > (org.genes[GENE_SCAVENGER] || 0) * 0.5 && other.isHostile) {
+                                if (potentialScavengerThreat === null || distance < (Math.sqrt((potentialScavengerThreat.x - org.x)**2 + (potentialScavengerThreat.y - org.y)**2) - potentialScavengerThreat.radius - org.radius)) {
+                                    potentialScavengerThreat = other;
+                                }
+                            }
+
+                            if (org.seeksHerd && distance < org.sightRange * HERD_DETECTION_RADIUS_MULTIPLIER) {
+                                const isDirectThreatOrPrey = (strongestThreat && strongestThreat.id === other.id) || (bestPrey && bestPrey.id === other.id);
+                                if (!isDirectThreatOrPrey) {
+                                    herdMembers.push(other);
+                                }
+                            }
                         }
-                    } else if (org.isAttractedToWalls && walls.length > 0 && !org.flees && !org.hunts && !org.isScavenging && !org.isDwelling) {
-                        org.targetWallPoint = findClosestWallPoint(org);
-                    } else if (org.seeksHerd && herdMembers.length > 0 && !org.flees && !org.hunts && !org.isScavenging && !org.isDwelling && !org.targetWallPoint) {
-                        let sumX = 0, sumY = 0;
-                        herdMembers.forEach(member => { sumX += member.x; sumY += member.y; });
-                        org.targetHerdCenter = { x: sumX / herdMembers.length, y: sumY / herdMembers.length };
+                    });
+
+                    if (org.isScavenger) {
+                        husks.forEach(husk => {
+                            if (consumedHuskIds.has(husk.id)) return;
+                            const dx = husk.x - org.x;
+                            const dy = husk.y - org.y;
+                            const distance = Math.sqrt(dx * dx + dy * dy) - husk.radius - org.radius;
+                            if (distance < org.sightRange) {
+                                if (bestHuskTarget === null || (distance < (Math.sqrt((bestHuskTarget.x - org.x)**2 + (bestHuskTarget.y - org.y)**2) - bestHuskTarget.radius - org.radius) && husk.radius <= org.radius)) {
+                                    bestHuskTarget = husk;
+                                }
+                            }
+                        });
                     }
                 }
-                
-                let targetVx=org.vx;let targetVy=org.vy;
-                if(org.targetOrganism){const target=organisms.find(o=>o.id===org.targetOrganism.id&&!deadOrConsumedOrganismIds.has(o.id));if(target){const dirX=target.x-org.x;const dirY=target.y-org.y;const distToTarget=Math.sqrt(dirX*dirX+dirY*dirY);if(distToTarget>0){const moveFactor=org.flees?-1:1;targetVx=(dirX/distToTarget)*org.speed*moveFactor;targetVy=(dirY/distToTarget)*org.speed*moveFactor;}}}
-                else if(org.targetHusk){const target=husks.find(h=>h.id===org.targetHusk.id&&!consumedHuskIds.has(h.id));if(target){const dirX=target.x-org.x;const dirY=target.y-org.y;const distToTarget=Math.sqrt(dirX*dirX+dirY*dirY);if(distToTarget>0){targetVx=(dirX/distToTarget)*org.speed;targetVy=(dirY/distToTarget)*org.speed;}}}
-                else if (org.targetDwellingPoint) { 
-                    const dirX = org.targetDwellingPoint.x - org.x;
-                    const dirY = org.targetDwellingPoint.y - org.y;
-                    const distToTarget = Math.sqrt(dirX*dirX + dirY*dirY);
-                    if (distToTarget > DWELLING_REACH_THRESHOLD) { 
-                        targetVx = (dirX / distToTarget) * org.speed * org.dwellingGeneValue * DWELLING_FORCE;
-                        targetVy = (dirY / distToTarget) * org.speed * org.dwellingGeneValue * DWELLING_FORCE;
-                    } else { 
-                        org.isDwelling = false; 
-                        org.targetDwellingPoint = null;
-                        targetVx = 0; targetVy = 0; 
+
+                // Primary behavior determination based on priorities
+                let targetVx = org.vx; // Initialize targetVx
+                let targetVy = org.vy; // Initialize targetVy
+
+                if (isStarving && (bestHuskTarget || (bestPrey && org.isHostile))) {
+                    // Starvation overrides fear
+                    if (bestHuskTarget) {
+                        org.isScavenging = true;
+                        org.targetHusk = bestHuskTarget;
+                    } else if (bestPrey && org.isHostile) {
+                        org.hunts = true;
+                        org.targetOrganism = bestPrey;
                     }
+                } else if (strongestThreat) {
+                    org.flees = true;
+                    org.targetOrganism = strongestThreat;
+                } else if (org.isScavenger && potentialScavengerThreat && bestHuskTarget) {
+                    // Scavenger/Fear conflict resolution: compare fear vs scavenger gene
+                    if ((org.genes[GENE_FEAR_FACTOR] || 0) > (org.genes[GENE_SCAVENGER] || 0)) {
+                        org.flees = true;
+                        org.targetOrganism = potentialScavengerThreat;
+                    } else {
+                        org.isScavenging = true;
+                        org.targetHusk = bestHuskTarget;
+                    }
+                } else if (bestPrey && org.isHostile) {
+                    org.hunts = true;
+                    org.targetOrganism = bestPrey;
+                } else if (bestHuskTarget && org.isScavenger) {
+                    org.isScavenging = true;
+                    org.targetHusk = bestHuskTarget;
+                } else if (org.canDwelling && org.timeToLive > org.initialTimeToLive * DWELLING_LIFESPAN_SATISFACTION_RATIO) {
+                    const distToBirthSq = (org.x - org.birthX)**2 + (org.y - org.birthY)**2;
+                    if (distToBirthSq > (DWELLING_REACH_THRESHOLD * 2)**2) {
+                         org.isDwelling = true;
+                         org.targetDwellingPoint = { x: org.birthX, y: org.birthY };
+                    }
+                } else if (org.isAttractedToWalls && walls.length > 0) {
+                    org.targetWallPoint = findClosestWallPoint(org);
+                } else if (org.seeksHerd && herdMembers.length > 0) {
+                    // Fix: Define dx and dy for targetHerdCenter
+                    const dx = org.targetHerdCenter.x - org.x; 
+                    const dy = org.targetHerdCenter.y - org.y;
+                    const distToTarget = Math.sqrt(dx*dx + dy*dy);
+                    if (distToTarget > org.radius * 2) { targetVx = (dx / distToTarget) * org.speed * org.herdDrive * HERD_FORCE; targetVy = (dy / distToTarget) * org.speed * org.herdDrive * HERD_FORCE; }
                 }
-                else if (org.targetWallPoint) { const dirX = org.targetWallPoint.x - org.x; const dirY = org.targetWallPoint.y - org.y; const distToTarget = Math.sqrt(dirX*dirX + dirY*dirY); if (distToTarget > org.radius * 0.5) { targetVx = (dirX / distToTarget) * org.speed * org.wallAttractionFactor * WALL_ATTRACTION_FORCE; targetVy = (dirY / distToTarget) * org.speed * org.wallAttractionFactor * WALL_ATTRACTION_FORCE; } else { targetVx = 0; targetVy = 0;} } 
-                else if (org.targetHerdCenter) { const dirX = org.targetHerdCenter.x - org.x; const dirY = org.targetHerdCenter.y - org.y; const distToTarget = Math.sqrt(dirX*dirX + dirY*dirY); if (distToTarget > org.radius * 2) { targetVx = (dirX / distToTarget) * org.speed * org.herdDrive * HERD_FORCE; targetVy = (dirY / distToTarget) * org.speed * org.herdDrive * HERD_FORCE; } }
                 else if(!wantsToLeaveSalt&&org.speed>0){if(Math.random()<0.05){const angle=Math.random()*Math.PI*2;targetVx=Math.cos(angle)*org.speed*0.3;targetVy=Math.sin(angle)*org.speed*0.3;}}
                 else if(org.speed===0&&!wantsToLeaveSalt){targetVx=0;targetVy=0;}
                 
+                // Pathfinding logic - START
+                if (org.canPathfind) {
+                    const wallDetectionRadius = org.radius * WALL_DETECTION_RANGE_MULTIPLIER;
+                    let wallInfluenceX = 0;
+                    let wallInfluenceY = 0;
+
+                    walls.forEach(wall => {
+                        const closestPoint = getClosestPointOnLineSegment(org.x, org.y, wall.x1, wall.y1, wall.x2, wall.y2);
+                        const dx = org.x - closestPoint.x;
+                        const dy = org.y - closestPoint.y;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+
+                        if (distance < wallDetectionRadius + wall.thickness / 2) {
+                            const normX = dx / distance;
+                            const normY = dy / distance;
+
+                            // Apply wall avoidance force if fleeing OR trying to leave salt
+                            if (org.flees || wantsToLeaveSalt) { // MODIFIED: Pathfinding for salt avoidance
+                                wallInfluenceX += normX * WALL_AVOIDANCE_FORCE;
+                                wallInfluenceY += normY * WALL_AVOIDANCE_FORCE;
+                            } else if (org.hunts || org.isScavenging) {
+                                // Hunting/Scavenging: steer around the wall if it's between the organism and target
+                                let targetX, targetY;
+                                if (org.targetOrganism) {
+                                    const target = organisms.find(o => o.id === org.targetOrganism.id && !deadOrConsumedOrganismIds.has(o.id));
+                                    if (target) { targetX = target.x; targetY = target.y; }
+                                } else if (org.targetHusk) {
+                                    const target = husks.find(h => h.id === org.targetHusk.id && !consumedHuskIds.has(h.id));
+                                    if (target) { targetX = target.x; targetY = target.y; }
+                                }
+
+                                if (targetX !== undefined && targetY !== undefined) {
+                                    const orgToTargetX = targetX - org.x;
+                                    const orgToTargetY = targetY - org.y;
+                                    const orgToWallX = closestPoint.x - org.x;
+                                    const orgToWallY = closestPoint.y - org.y;
+
+                                    // Check if the wall is generally in the direction of the target
+                                    const dotProduct = orgToTargetX * orgToWallX + orgToTargetY * orgToWallY;
+                                    if (dotProduct > 0) { 
+                                        // Calculate perpendicular vector to the wall segment
+                                        const wallDirX = wall.x2 - wall.x1;
+                                        const wallDirY = wall.y2 - wall.y1;
+                                        const wallLength = Math.sqrt(wallDirX * wallDirX + wallDirY * wallDirY);
+                                        if (wallLength > 0) {
+                                            const perpX = -wallDirY / wallLength; // Perpendicular vector (one direction)
+                                            const perpY = wallDirX / wallLength;
+
+                                            // Apply force to steer away from the wall, towards the side where the target is
+                                            // This cross product determines which side of the wall the target is on
+                                            const crossProduct = (targetX - closestPoint.x) * wallDirY - (targetY - closestPoint.y) * wallDirX;
+
+                                            if (crossProduct > 0) { 
+                                                wallInfluenceX += perpX * WALL_STEERING_FORCE;
+                                                wallInfluenceY += perpY * WALL_STEERING_FORCE;
+                                            } else { 
+                                                wallInfluenceX -= perpX * WALL_STEERING_FORCE;
+                                                wallInfluenceY -= perpY * WALL_STEERING_FORCE;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                    targetVx += wallInfluenceX;
+                    targetVy += wallInfluenceY;
+                }
+                // Pathfinding logic - END
+                
                 const inertiaFactor=org.speed>0?0.05:1;org.vx+=(targetVx-org.vx)*inertiaFactor;org.vy+=(targetVy-org.vy)*inertiaFactor;
+                
+                // Apply global drag
+                org.vx *= DRAG_FACTOR; 
+                org.vy *= DRAG_FACTOR; 
+
                 if(org.speed===0&&!wantsToLeaveSalt){org.vx*=0.9;org.vy*=0.9;}
                 else{const currentSpeedVal=Math.sqrt(org.vx**2+org.vy**2);if(currentSpeedVal>org.speed*1.5&&org.speed>0){org.vx=(org.vx/currentSpeedVal)*org.speed*1.5;org.vy=(org.vy/currentSpeedVal)*org.speed*1.5;}}
                 
                 org.x+=org.vx*deltaTime;org.y+=org.vy*deltaTime;
                 
-                walls.forEach(wall=>{const closestPoint=getClosestPointOnLineSegment(org.x,org.y,wall.x1,wall.y1,wall.x2,wall.y2);const dx=org.x-closestPoint.x;const dy=org.y-closestPoint.y;const distSq=dx*dx+dy*dy;const totalRadius=org.radius+wall.thickness/2;if(distSq<totalRadius*totalRadius){const dist=Math.sqrt(distSq);const overlap=totalRadius-dist;if(dist>0){const pushX=(dx/dist)*overlap;const pushY=(dy/dist)*overlap;org.x+=pushX;org.y+=pushY;const dotProduct=org.vx*(closestPoint.x-org.x)+org.vy*(closestPoint.y-org.y);if(dotProduct<0){org.vx*=-0.3;org.vy*=-0.3;}}else{org.x+=(Math.random()-0.5)*0.1;org.y+=(Math.random()-0.5)*0.1;}}});
+                walls.forEach(wall=>{const closestPoint=getClosestPointOnLineSegment(org.x,org.y,wall.x1,wall.y1,wall.x2,wall.y2);const dx=org.x-closestPoint.x;const dy=org.y-closestPoint.y;const distSq=dx*dx+dy*dy;const totalRadius=org.radius+wall.thickness/2;if(distSq<totalRadius*totalRadius&&distSq>0){const dist=Math.sqrt(distSq);const overlap=totalRadius-dist;const pushX=(dx/dist)*overlap;const pushY=(dy/dist)*overlap;org.x+=pushX;org.y+=pushY;const dotProduct=org.vx*(closestPoint.x-org.x)+org.vy*(closestPoint.y-org.y);if(dotProduct<0){org.vx*=-0.3;org.vy*=-0.3;}}else if (distSq === 0) { /* If organism is exactly on the wall, nudge it */ org.x+=(Math.random()-0.5)*0.1;org.y+=(Math.random()-0.5)*0.1;}});
                 const bounceFactor=-0.5;if(org.x-org.radius<0){org.x=org.radius;org.vx*=bounceFactor;}else if(org.x+org.radius>worldWidth){org.x=worldWidth-org.radius;org.vx*=bounceFactor;} if(org.y-org.radius<0){org.y=org.radius;org.vy*=bounceFactor;}else if(org.y+org.radius>worldHeight){org.y=worldHeight-org.radius;org.vy*=bounceFactor;}
                 organisms.forEach(other=>{if(org===other||deadOrConsumedOrganismIds.has(other.id)||other.isEgg)return;const dx=other.x-org.x;const dy=other.y-org.y;const distanceSq=dx*dx+dy*dy;const sumRadii=org.radius+other.radius;if(distanceSq<sumRadii*sumRadii&&distanceSq>0){const isEatingScenario=org.isHostile&&((org.strength>other.strength)||(org.strength===other.strength&&org.radius>other.radius));if(!isEatingScenario){const distance=Math.sqrt(distanceSq);const overlap=sumRadii-distance;const pushX=(dx/distance)*overlap*0.5;const pushY=(dy/distance)*overlap*0.5;org.x-=pushX;org.y-=pushY;other.x+=pushX;other.y+=pushY;const tempVx=org.vx;const tempVy=org.vy;org.vx=other.vx*0.5;org.vy=other.vy*0.5;other.vx=tempVx*0.5;other.vy=tempVy*0.5;}}});
                 
@@ -621,7 +911,80 @@
 
         function getCellOffsets(numCells, baseOffsetScale, rotation = 0) { const offsets = []; const angleOffset = rotation; if (numCells <= 0) return [{x:0, y:0}]; if (numCells === 1) { offsets.push({ x: 0, y: 0 }); } else if (numCells === 2) { const d = baseOffsetScale * 0.7; offsets.push({ x: -d*Math.cos(angleOffset), y: -d*Math.sin(angleOffset) }); offsets.push({ x: d*Math.cos(angleOffset), y: d*Math.sin(angleOffset) }); } else if (numCells === 3) { const r = baseOffsetScale * 0.9; for (let i=0; i<3; i++) offsets.push({ x: r*Math.cos(i*2*Math.PI/3 + angleOffset), y: r*Math.sin(i*2*Math.PI/3 + angleOffset) }); } else if (numCells === 4) { const d = baseOffsetScale * 1.0; const ba=[Math.PI/4, 3*Math.PI/4, 5*Math.PI/4, 7*Math.PI/4]; for (let i=0; i<4; i++) offsets.push({ x: d*Math.cos(ba[i]+angleOffset), y: d*Math.sin(ba[i]+angleOffset) }); } else { offsets.push({ x: 0, y: 0 }); const noc = numCells - 1; if (noc > 0) { const as = (Math.PI*2)/noc; let rrf=1.5; if (noc>12) rrf=1.8; if (noc>24) rrf=2.2; let rr=baseOffsetScale*rrf; rr=Math.max(rr, (noc*baseOffsetScale*0.35)/Math.PI); for (let i=0; i<noc; i++) offsets.push({x:rr*Math.cos(i*as+angleOffset), y:rr*Math.sin(i*as+angleOffset)});}} return offsets; }
         
-        function draw() { ctx.clearRect(0,0,canvas.width,canvas.height); ctx.save(); ctx.scale(viewScale,viewScale); ctx.translate(-viewOffsetX,-viewOffsetY); ctx.fillStyle=SALT_REGION_TINT_COLOR; saltRegions.forEach(region=>{ctx.fillRect(region.x,region.y,region.width,region.height);}); ctx.strokeStyle='#555e70'; ctx.lineWidth=WALL_THICKNESS; walls.forEach(wall=>{ctx.beginPath();ctx.moveTo(wall.x1,wall.y1);ctx.lineTo(wall.x2,wall.y2);ctx.stroke();}); ctx.fillStyle='#4a5568'; foodDispensers.forEach(dispenser=>{ctx.beginPath();ctx.arc(dispenser.x,dispenser.y,dispenser.radius,0,Math.PI*2);ctx.fill();}); if(showScavengerHeatmap){ctx.fillStyle=HEATMAP_SCAVENGER_COLOR;organisms.forEach(org=>{if(org.isScavenger && !org.isEgg){ctx.beginPath();ctx.arc(org.x,org.y,org.radius*HEATMAP_RADIUS_MULTIPLIER,0,Math.PI*2);ctx.fill();}}); } if(showPreyHeatmap){ctx.fillStyle=HEATMAP_PREY_COLOR;organisms.forEach(org=>{if(org.flees && !org.isEgg){ctx.beginPath();ctx.arc(org.x,org.y,org.radius*HEATMAP_RADIUS_MULTIPLIER,0,Math.PI*2);ctx.fill();}}); } if(showPredatorHeatmap){ctx.fillStyle=HEATMAP_PREDATOR_COLOR;organisms.forEach(org=>{if(org.isHostile && !org.isEgg){ctx.beginPath();ctx.arc(org.x,org.y,org.radius*HEATMAP_RADIUS_MULTIPLIER,0,Math.PI*2);ctx.fill();}}); } husks.forEach(husk=>{ctx.beginPath();ctx.arc(husk.x,husk.y,husk.radius,0,Math.PI*2);ctx.fillStyle=HUSK_COLOR;ctx.fill();}); organisms.forEach(org=>{ if (org.isPlasmodiumActive && org.plasmodiumEffectRadius > 0 && !org.isEgg) { ctx.fillStyle = `hsla(${Math.floor((org.genes[GENE_HUE] || 0) * 360)}, 70%, 60%, ${PLASMODIUM_TINT_ALPHA})`; ctx.beginPath(); ctx.arc(org.x, org.y, org.plasmodiumEffectRadius, 0, Math.PI * 2); ctx.fill(); } let fillStyle = org.color; if (org.isEgg) { fillStyle = EGG_COLOR; } else if (org.isHostile) { fillStyle = `hsl(${Math.floor((org.genes[GENE_HUE]||0)*360)}, 90%, 45%)`; } ctx.fillStyle = fillStyle; if(!org.cellCount||org.cellCount<=0||org.isEgg){ ctx.beginPath();ctx.arc(org.x,org.y,org.radius,0,Math.PI*2);ctx.fill(); } else{ const numCells=org.cellCount; const individualCellRadius=Math.max(1.5,org.radius/(Math.sqrt(numCells)*0.8+0.2)); const cellLayoutScale=individualCellRadius*0.7; const uniqueAngleOffset=(org.id.charCodeAt(0)%16/16)*Math.PI*2; const cellPositions=getCellOffsets(numCells,cellLayoutScale,uniqueAngleOffset); cellPositions.forEach(pos=>{ctx.beginPath();ctx.arc(org.x+pos.x,org.y+pos.y,individualCellRadius,0,Math.PI*2);ctx.fill();}); } if(!org.isEgg) { if(org.flagellaCount>0){ctx.strokeStyle=org.color;ctx.lineWidth=Math.max(1,org.radius*0.1);const angleStep=(Math.PI*2)/org.flagellaCount;for(let i=0;i<org.flagellaCount;i++){const baseAngle=i*angleStep;const wave=Math.sin(simulationTime*10/gameSpeedMultiplier+baseAngle+org.id.charCodeAt(0)*0.1)*0.4;const angle=Math.atan2(org.vy,org.vx)+Math.PI+baseAngle+wave;const length=org.radius*1.2;ctx.beginPath();ctx.moveTo(org.x,org.y);ctx.lineTo(org.x+Math.cos(angle)*length,org.y+Math.sin(angle)*length);ctx.stroke();}} if(org.sightRange>0){ctx.fillStyle='rgba(255,255,255,0.8)';const eyeSize=Math.max(1.5,org.radius*0.25);const moveAngle=Math.atan2(org.vy,org.vx);ctx.beginPath();ctx.arc(org.x+Math.cos(moveAngle)*org.radius*0.5,org.y+Math.sin(moveAngle)*org.radius*0.5,eyeSize,0,Math.PI*2);ctx.fill();}} }); ctx.restore(); }
+        function draw() { 
+            ctx.clearRect(0,0,canvas.width,canvas.height); 
+            ctx.save(); 
+            ctx.scale(viewScale,viewScale); 
+            ctx.translate(-viewOffsetX,-viewOffsetY); 
+            
+            // Draw salt regions
+            ctx.fillStyle=SALT_REGION_TINT_COLOR; 
+            saltRegions.forEach(region=>{ctx.fillRect(region.x,region.y,region.width,region.height);}); 
+            
+            // Draw walls
+            ctx.strokeStyle='#555e70'; 
+            ctx.lineWidth=WALL_THICKNESS; 
+            walls.forEach(wall=>{ctx.beginPath();ctx.moveTo(wall.x1,wall.y1);ctx.lineTo(wall.x2,wall.y2);ctx.stroke();}); 
+            
+            // Draw food dispensers
+            ctx.fillStyle='#4a5568'; 
+            foodDispensers.forEach(dispenser=>{ctx.beginPath();ctx.arc(dispenser.x,dispenser.y,dispenser.radius,0,Math.PI*2);ctx.fill();}); 
+            
+            // Draw heatmaps
+            if(showScavengerHeatmap){ctx.fillStyle=HEATMAP_SCAVENGER_COLOR;organisms.forEach(org=>{if(org.isScavenger && !org.isEgg){ctx.beginPath();ctx.arc(org.x,org.y,org.radius*HEATMAP_RADIUS_MULTIPLIER,0,Math.PI*2);ctx.fill();}}); } 
+            if(showPreyHeatmap){ctx.fillStyle=HEATMAP_PREY_COLOR;organisms.forEach(org=>{if(org.flees && !org.isEgg){ctx.beginPath();ctx.arc(org.x,org.y,org.radius*HEATMAP_RADIUS_MULTIPLIER,0,Math.PI*2);ctx.fill();}}); } 
+            if(showPredatorHeatmap){ctx.fillStyle=HEATMAP_PREDATOR_COLOR;organisms.forEach(org=>{if(org.isHostile && !org.isEgg){ctx.beginPath();ctx.arc(org.x,org.y,org.radius*HEATMAP_RADIUS_MULTIPLIER,0,Math.PI*2);ctx.fill();}}); } 
+            
+            // Draw husks
+            husks.forEach(husk=>{ctx.beginPath();ctx.arc(husk.x,husk.y,husk.radius,0,Math.PI*2);ctx.fillStyle=HUSK_COLOR;ctx.fill();}); 
+            
+            // Draw mycelium connections
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)'; // Faint white color
+            ctx.lineWidth = 0.5;
+            myceliumConnections.forEach(key => {
+                const [id1, id2] = key.split('-');
+                const org1 = organisms.find(o => o.id === id1);
+                const org2 = organisms.find(o => o.id === id2);
+
+                if (org1 && org2) {
+                    ctx.beginPath();
+                    ctx.moveTo(org1.x, org1.y);
+                    ctx.lineTo(org2.x, org2.y);
+                    ctx.stroke();
+                }
+            });
+
+            // Draw organisms
+            organisms.forEach(org=>{ 
+                if (org.isPlasmodiumActive && org.plasmodiumEffectRadius > 0 && !org.isEgg) { 
+                    ctx.fillStyle = `hsla(${Math.floor((org.genes[GENE_HUE] || 0) * 360)}, 70%, 60%, ${PLASMODIUM_TINT_ALPHA})`; 
+                    ctx.beginPath(); 
+                    ctx.arc(org.x, org.y, org.plasmodiumEffectRadius, 0, Math.PI * 2); 
+                    ctx.fill(); 
+                } 
+                let fillStyle = org.color; 
+                if (org.isEgg) { 
+                    fillStyle = EGG_COLOR; 
+                } else if (org.isHostile) { 
+                    fillStyle = `hsl(${Math.floor((org.genes[GENE_HUE]||0)*360)}, 90%, 45%)`; 
+                } 
+                ctx.fillStyle = fillStyle; 
+                if(!org.cellCount||org.cellCount<=0||org.isEgg){ 
+                    ctx.beginPath();ctx.arc(org.x,org.y,org.radius,0,Math.PI*2);ctx.fill(); 
+                } else{ 
+                    const numCells=org.cellCount; 
+                    const individualCellRadius=Math.max(1.5,org.radius/(Math.sqrt(numCells)*0.8+0.2)); 
+                    const cellLayoutScale=individualCellRadius*0.7; 
+                    const uniqueAngleOffset=(org.id.charCodeAt(0)%16/16)*Math.PI*2; 
+                    const cellPositions=getCellOffsets(numCells,cellLayoutScale,uniqueAngleOffset); 
+                    cellPositions.forEach(pos=>{ctx.beginPath();ctx.arc(org.x+pos.x,org.y+pos.y,individualCellRadius,0,Math.PI*2);ctx.fill();}); 
+                } 
+                if(!org.isEgg) { 
+                    if(org.flagellaCount>0){ctx.strokeStyle=org.color;ctx.lineWidth=Math.max(1,org.radius*0.1);const angleStep=(Math.PI*2)/org.flagellaCount;for(let i=0;i<org.flagellaCount;i++){const baseAngle=i*angleStep;const wave=Math.sin(simulationTime*10/gameSpeedMultiplier+baseAngle+org.id.charCodeAt(0)*0.1)*0.4;const angle=Math.atan2(org.vy,org.vx)+Math.PI+baseAngle+wave;const length=org.radius*1.2;ctx.beginPath();ctx.moveTo(org.x,org.y);ctx.lineTo(org.x+Math.cos(angle)*length,org.y+Math.sin(angle)*length);ctx.stroke();}} 
+                    if(org.sightRange>0){ctx.fillStyle='rgba(255,255,255,0.8)';const eyeSize=Math.max(1.5,org.radius*0.25);const moveAngle=Math.atan2(org.vy,org.vx);ctx.beginPath();ctx.arc(org.x+Math.cos(moveAngle)*org.radius*0.5,org.y+Math.sin(moveAngle)*org.radius*0.5,eyeSize,0,Math.PI*2);ctx.fill();}} 
+            }); 
+            ctx.restore(); 
+        }
 
         function gameLoop(timestamp) { update(timestamp||performance.now());draw();if(!isPaused){animationFrameId=requestAnimationFrame(gameLoop);}}
         
@@ -688,7 +1051,8 @@
         
         canvas.addEventListener('wheel',(event)=>{event.preventDefault();const rect=canvas.getBoundingClientRect();const mouseCanvasX=event.clientX-rect.left;const mouseCanvasY=event.clientY-rect.top;const worldMouseXBeforeZoom=(mouseCanvasX/viewScale)+viewOffsetX;const worldMouseYBeforeZoom=(mouseCanvasY/viewScale)+viewOffsetY;const zoomIntensity=0.1;const direction=event.deltaY<0?1:-1;viewScale*=(1+direction*zoomIntensity);clampViewOffset();viewOffsetX=worldMouseXBeforeZoom-(mouseCanvasX/viewScale);viewOffsetY=worldMouseYBeforeZoom-(mouseCanvasY/viewScale);clampViewOffset();if(!isPaused||isPaused)draw();});
         
-        function closeModalAndResume(){
+        // Function to close the info modal and resume simulation
+        function closeInfoModalAndResume(){
             organismInfoModal.classList.add('hidden');
             // Only resume if it was paused *by opening the modal*
             if(isPaused && pauseButton.textContent==="Resume" && organismInfoModal.classList.contains('hidden')){ 
@@ -699,9 +1063,32 @@
                 animationFrameId=requestAnimationFrame(gameLoop);
             }
         }
-        closeInfoModal.addEventListener('click',closeModalAndResume);
-        closeInfoModalButton.addEventListener('click',closeModalAndResume);
-        organismInfoModal.addEventListener('click',(event)=>{if(event.target===organismInfoModal)closeModalAndResume();});
+
+        closeInfoModal.addEventListener('click',closeInfoModalAndResume);
+        closeInfoModalButton.addEventListener('click',closeInfoModalAndResume);
+        organismInfoModal.addEventListener('click',(event)=>{if(event.target===organismInfoModal)closeInfoModalAndResume();});
+
+        // Auto-pause/resume when tab is hidden/visible
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                // Tab is hidden, pause the game
+                if (!isPaused) { // Only pause if not already paused
+                    isPaused = true;
+                    pauseButton.textContent = "Resume";
+                    if (animationFrameId) cancelAnimationFrame(animationFrameId);
+                }
+            } else {
+                // Tab is visible, resume the game
+                // Only resume if the game was paused by the tab going out of focus
+                if (isPaused && pauseButton.textContent === "Resume" && organismInfoModal.classList.contains('hidden')) {
+                    isPaused = false;
+                    pauseButton.textContent = "Pause";
+                    lastTickTime = performance.now();
+                    if (animationFrameId) cancelAnimationFrame(animationFrameId);
+                    animationFrameId = requestAnimationFrame(gameLoop);
+                }
+            }
+        });
 
         // Initial Setup
         resizeCanvas(); 

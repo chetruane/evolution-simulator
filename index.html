@@ -135,13 +135,6 @@
                     <li><strong>Genes in Side Panel:</strong> Click a gene to find and spectate another organism with similar genetic traits.</li>
                 </ul>
 
-                <h4 class="font-semibold text-base mt-4">Key Changes in v3.1:</h4>
-                <ul class="list-disc list-inside space-y-1 ml-2">
-                    <li><strong>Spectator View:</strong> Clicking an organism now activates a camera lock and opens a non-pausing side panel with its details. Genes in the panel are clickable to find similar organisms.</li>
-                    <li><strong>Heterogamy:</strong> Organisms with a Breeding gene value very close to the activation threshold can reproduce both asexually and sexually.</li>
-                    <li><strong>New Gene - Litters:</strong> If a breeding organism has this gene expressed, it can produce multiple offspring (1-8) per sexual reproduction event, depending on the gene's strength.</li>
-                </ul>
-
                 <h4 class="font-semibold text-base mt-4">Gene Definitions:</h4>
                 <ul class="list-disc list-inside space-y-1 ml-2">
                     <li><strong>Hue:</strong> Organism's color.</li>
@@ -831,7 +824,7 @@
                     }
                 }
 
-                org.timeToLive -= org.cellCount * deltaTime;
+                org.timeToLive -= Math.sqrt(org.cellCount) * deltaTime;
                 if (org.timeToLive <= 0) {
                     deadOrConsumedOrganismIds.add(org.id); 
                     husks.push({id:'husk_'+org.id+'_'+Date.now(),x:org.x,y:org.y,radius:org.radius*0.5,cellCount:org.cellCount});

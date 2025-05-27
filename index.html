@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Evolution Simulator v3</title>
+    <title>Evolution Simulator v3.1</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { font-family: 'Inter', sans-serif; margin: 0; overflow: hidden; background-color: #111827; color: #e5e7eb; }
@@ -17,7 +17,22 @@
         }
         .stat-label { color: #9ca3af; /* Tailwind gray-400 */ }
         .stat-value { color: #e5e7eb; /* Tailwind gray-200 */ }
-        .modal-backdrop { background-color: rgba(0, 0, 0, 0.5); }
+
+        /* Styles for the new side info panel */
+        #organismInfoPanel {
+            background-color: #1f2937; /* Tailwind gray-800 */
+            border-left: 1px solid #374151; /* Tailwind gray-700 */
+            box-shadow: -5px 0 15px rgba(0,0,0,0.2);
+        }
+        .gene-clickable {
+            cursor: pointer;
+            transition: color 0.2s ease-in-out;
+        }
+        .gene-clickable:hover .text-gray-400, .gene-clickable:hover .gene-value-display {
+            color: #60a5fa; /* Tailwind blue-400 for hover */
+        }
+
+
         input[type="range"]::-webkit-slider-thumb {
             -webkit-appearance: none; appearance: none; width: 20px; height: 20px;
             background: #2563eb; cursor: pointer; border-radius: 50%;
@@ -31,6 +46,9 @@
         .gene-active { color: #4ade80; /* Tailwind green-400 */ }
         .gene-inactive { color: #f87171; /* Tailwind red-400 */ }
         .gene-neutral { color: #cbd5e1; /* Tailwind slate-300 */ }
+
+        /* Modal backdrop for HowToPlay */
+        .modal-backdrop { background-color: rgba(0, 0, 0, 0.5); }
     </style>
 </head>
 <body class="flex flex-col h-screen">
@@ -42,6 +60,7 @@
             <div><span class="stat-label">Duplications (Asexual):</span> <span id="duplicationCount" class="stat-value font-semibold">0</span></div>
             <div><span class="stat-label">Breedings (Sexual):</span> <span id="breedingCount" class="stat-value font-semibold">0</span></div>
             <div><span class="stat-label">Evolutions:</span> <span id="evolutionCount" class="stat-value font-semibold">0</span></div>
+            <div><span class="stat-label">Spectating:</span> <span id="spectatingStatus" class="stat-value font-semibold">None</span></div>
         </div>
         <div class="mt-3">
              <button id="resetButton" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium">Reset Simulation</button>
@@ -67,81 +86,75 @@
         </div>
     </div>
 
-    <div class="flex-grow relative">
-        <canvas id="simulationCanvas"></canvas>
-    </div>
-
-    <div id="organismInfoModal" class="fixed inset-0 modal-backdrop flex items-center justify-center hidden p-4 z-50">
-        <div class="bg-gray-800 p-6 rounded-lg shadow-xl text-gray-200 max-w-md w-full max-h-[80vh] overflow-y-auto">
+    <div class="flex-grow relative flex">
+        <div class="flex-grow relative">
+            <canvas id="simulationCanvas"></canvas>
+        </div>
+        <div id="organismInfoPanel" class="fixed top-0 right-0 h-full w-80 bg-gray-800 p-4 shadow-xl text-gray-200 max-h-screen overflow-y-auto hidden z-40 border-l border-gray-700">
             <div class="flex justify-between items-center mb-4">
-                <h3 class="text-xl font-semibold" id="infoOrganismId">Organism Details</h3>
-                <button id="closeInfoModal" class="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
+                <h3 class="text-lg font-semibold" id="infoOrganismId">Organism Details</h3>
+                <button id="closeInfoPanelButton" class="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
             </div>
             <div id="infoGeneList" class="space-y-1 text-sm mb-4"></div>
             <div class="text-xs text-gray-400 mb-3">
                 <p><span class="gene-active">Green:</span> Trait active / threshold met.</p>
                 <p><span class="gene-inactive">Red:</span> Trait inactive / threshold not met.</p>
-                <p><span class="gene-neutral">Slate:</span> Value-based gene (e.g., size, color).</p>
+                <p><span class="gene-neutral">Slate:</span> Value-based gene.</p>
+                <p class="mt-1">Click a gene to find similar organisms.</p>
             </div>
-            <button id="closeInfoModalButton" class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg">Close</button>
         </div>
     </div>
 
     <div id="howToPlayModal" class="fixed inset-0 modal-backdrop flex items-center justify-center hidden p-4 z-50">
         <div class="bg-gray-800 p-6 rounded-lg shadow-xl text-gray-200 max-w-lg w-full max-h-[80vh] overflow-y-auto">
             <div class="flex justify-between items-center mb-4">
-                <h3 class="text-xl font-semibold">How to Play</h3>
+                <h3 class="text-xl font-semibold">How to Play - v3.1</h3>
                 <button id="closeHowToPlayModal" class="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
             </div>
             <div class="text-sm space-y-3">
-                <p>Welcome to the Evolution Simulator! Observe and interact with simple organisms as they evolve and adapt in a dynamic environment.</p>
+                <p>Welcome to the Evolution Simulator! Observe simple organisms as they evolve.</p>
                 
-                <h4 class="font-semibold text-base mt-4">Simulation Basics:</h4>
-                <ul class="list-disc list-inside space-y-1 ml-2">
-                    <li>Organisms attempt to reproduce every so often.</li>
-                    <li>They have a lifespan that decreases over time. Eating food (husks) extends their life.</li>
-                    <li>Reproduction can lead to genetic mutations, with environmental pressures driving evolution.</li>
-                    <li>Walls and salt regions lead to different habitats, while husk dispensers provide food for scavengers.</li>
-                </ul>
-
                 <h4 class="font-semibold text-base mt-4">Controls:</h4>
                 <ul class="list-disc list-inside space-y-1 ml-2">
-                    <li><strong>Click on an organism:</strong> View genetic makeup.</li>
-                    <li><strong>Click on empty space:</strong> Adds food.</li>
+                    <li><strong>Click on an organism:</strong> Spectate it & view genetic makeup in the side panel. Camera will follow.</li>
+                    <li><strong>Click on empty space:</strong> Adds food & stops spectating.</li>
                     <li><strong>Mouse Wheel:</strong> Zoom.</li>
+                    <li><strong>Genes in Side Panel:</strong> Click a gene to find and spectate another organism with similar genetic traits.</li>
+                </ul>
+
+                <h4 class="font-semibold text-base mt-4">Key Changes in v3.1:</h4>
+                <ul class="list-disc list-inside space-y-1 ml-2">
+                    <li><strong>Spectator View:</strong> Clicking an organism now activates a camera lock and opens a non-pausing side panel with its details. Genes in the panel are clickable to find similar organisms.</li>
+                    <li><strong>Heterogamy:</strong> Organisms with a Breeding gene value very close to the activation threshold can reproduce both asexually and sexually.</li>
+                    <li><strong>New Gene - Litters:</strong> If a breeding organism has this gene expressed, it can produce multiple offspring (1-8) per sexual reproduction event, depending on the gene's strength.</li>
                 </ul>
 
                 <h4 class="font-semibold text-base mt-4">Gene Definitions:</h4>
                 <ul class="list-disc list-inside space-y-1 ml-2">
-                    <li><strong>Hue:</strong> Determines the organism's color. Changes when a new gene is expressed.</li>
-                    <li><strong>Base Size:</strong> Influences the organism's fundamental size.</li>
-                    <li><strong>Duplication Rate:</strong> Affects how frequently an asexual organism attempts to duplicate (also influenced by cell count).</li>
-                    <li><strong>Flagella:</strong> The number of flagella an organism has, increasing its speed.</li>
-                    <li><strong>Hostility:</strong> Causes an organism to eat living instead of dead matter.</li>
-                    <li><strong>Sight Range:</strong> How far an organism can see.</li>
-                    <li><strong>Fear:</strong> Causes an organism to flee from larger hostile organisms.</li>
-                    <li><strong>Predator:</strong> The drive to actively seek and consume other organisms.</li>
-                    <li><strong>Complexity:</strong> Affects the number of individual cells an organism is composed of, and its strength.</li>
-                    <li><strong>Scavenger:</strong> Causes an organism to be attracted to husks.</li>
-                    <li><strong>Salt Tolerance:</strong> Reduces the negative effects of salt regions.</li>
-                    <li><strong>Salt Avoidance:</strong> Causes the organism to actively move away from salt regions.</li>
-                    <li><strong>Plasmodium:</strong> The organism emits a plasmodic goo to detect husks, offspring will spawn on top of any husks in the plasmodium.</li>
-                    <li><strong>Wall Attraction:</strong> Causes the organism to stay near walls.</li>
-                    <li><strong>Herd Mentality:</strong> Causes the organism to seek out and stay near other herd-mentality organisms.</li>
-                    <li><strong>Egg Layer:</strong> Enables the organism to lay eggs which hatch after a duration (applies to both asexual and sexual reproduction if parent is egg layer).</li>
-                    <li><strong>Dwelling:</strong> Causes the organism to return to its birth location when well-fed.</li>
-                    <li><strong>Mycelium:</strong> Enables the organism to form a network with nearby mycelium organisms, sharing resources.</li>
-                    <li><strong>Pathfinding:</strong> Allows the organism to navigate around walls more effectively when pursuing targets or fleeing.</li>
-                    <li><strong>Starvation:</strong> When active, causes the organism to fearlessly prioritise food when its time to live is critically low.</li>
-                    <li><strong>Curiosity:</strong> If active, causes larger strides during random "idle" movement.</li>
-                    <li><strong>Breeding:</strong> Organism reproduces sexually (requires a partner) instead of asexually.</li>
-                    <li><strong>Mating Ritual:</strong> If breeding is active, organism is attracted to other ritual-performing breeders with similar genetic makeup.</li>
-                </ul>
-                 <h4 class="font-semibold text-base mt-4">Key Changes in v3:</h4>
-                <ul class="list-disc list-inside space-y-1 ml-2">
-                    <li><strong>New Genes - Breeding & Mating Ritual:</strong> Introduces sexual reproduction. The Mating Ritual gene, if also expressed, causes them to seek out genetically similar mates.</li>
-                    <li><strong>Genetic Mixing:</strong> Offspring from sexual reproduction inherit a mix of genes from both parents.</li>
-                    <li>Bugfixes and other improvements.</li>
+                    <li><strong>Hue:</strong> Organism's color.</li>
+                    <li><strong>Base Size:</strong> Fundamental size.</li>
+                    <li><strong>Duplication Rate:</strong> Affects asexual reproduction frequency.</li>
+                    <li><strong>Flagella:</strong> Number of flagella, increasing speed.</li>
+                    <li><strong>Hostility:</strong> Causes organism to eat living matter.</li>
+                    <li><strong>Sight Range:</strong> How far it can see.</li>
+                    <li><strong>Fear:</strong> Flee from larger hostile organisms.</li>
+                    <li><strong>Predator:</strong> Drive to hunt other organisms.</li>
+                    <li><strong>Complexity:</strong> Number of cells, affects strength.</li>
+                    <li><strong>Scavenger:</strong> Attracted to husks (dead matter).</li>
+                    <li><strong>Salt Tolerance:</strong> Reduces negative effects of salt regions.</li>
+                    <li><strong>Salt Avoidance:</strong> Actively moves away from salt.</li>
+                    <li><strong>Plasmodium:</strong> Emits goo to detect husks.</li>
+                    <li><strong>Wall Attraction:</strong> Stays near walls.</li>
+                    <li><strong>Herd Mentality:</strong> Seeks other herd organisms.</li>
+                    <li><strong>Egg Layer:</strong> Lays eggs that hatch later.</li>
+                    <li><strong>Dwelling:</strong> Returns to birth location when well-fed.</li>
+                    <li><strong>Mycelium:</strong> Forms networks, sharing resources.</li>
+                    <li><strong>Pathfinding:</strong> Navigates around walls better.</li>
+                    <li><strong>Starvation:</strong> Prioritizes food when life is critically low.</li>
+                    <li><strong>Curiosity:</strong> Larger strides during random movement.</li>
+                    <li><strong>Breeding:</strong> Reproduces sexually (needs partner).</li>
+                    <li><strong>Mating Ritual:</strong> Attracted to genetically similar breeders.</li>
+                    <li><strong>Litters:</strong> Breeding organisms can have multiple offspring per reproduction.</li>
                 </ul>
             </div>
             <button id="closeHowToPlayModalButton" class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg mt-6">Got It!</button>
@@ -153,20 +166,22 @@
         const canvas = document.getElementById('simulationCanvas');
         const ctx = canvas.getContext('2d');
 
-        // Get UI elements for stats and controls
+        // Get UI elements
         const organismCountEl = document.getElementById('organismCount');
         const elapsedTimeEl = document.getElementById('elapsedTime');
-        const duplicationCountEl = document.getElementById('duplicationCount'); // For asexual
-        const breedingCountEl = document.getElementById('breedingCount'); // For sexual
+        const duplicationCountEl = document.getElementById('duplicationCount');
+        const breedingCountEl = document.getElementById('breedingCount');
         const evolutionCountEl = document.getElementById('evolutionCount');
+        const spectatingStatusEl = document.getElementById('spectatingStatus'); // New UI element
         const resetButton = document.getElementById('resetButton');
         const pauseButton = document.getElementById('pauseButton');
         const howToPlayButton = document.getElementById('howToPlayButton');
-        const organismInfoModal = document.getElementById('organismInfoModal');
+        
+        const organismInfoPanel = document.getElementById('organismInfoPanel'); // Changed from Modal
         const infoOrganismIdEl = document.getElementById('infoOrganismId');
         const infoGeneListEl = document.getElementById('infoGeneList');
-        const closeInfoModal = document.getElementById('closeInfoModal');
-        const closeInfoModalButton = document.getElementById('closeInfoModalButton');
+        const closeInfoPanelButton = document.getElementById('closeInfoPanelButton'); // Changed from Modal
+
         const howToPlayModal = document.getElementById('howToPlayModal');
         const closeHowToPlayModal = document.getElementById('closeHowToPlayModal');
         const closeHowToPlayModalButton = document.getElementById('closeHowToPlayModalButton');
@@ -179,12 +194,12 @@
         const togglePredatorHeatmapButton = document.getElementById('togglePredatorHeatmap');
 
         // --- Simulation Parameters ---
-        const DUPLICATION_CHANCE_PER_SECOND = 0.012; // For asexual reproduction
-        const EVOLUTION_CHANCE_ON_REPRODUCTION = 0.05; // Applies to both repro types
+        const DUPLICATION_CHANCE_PER_SECOND = 0.012;
+        const EVOLUTION_CHANCE_ON_REPRODUCTION = 0.05;
         const SECONDARY_MUTATION_CHANCE = 2/3; 
         const GENE_MUTATION_STRENGTH = 0.5;
         const MINOR_HUE_SHIFT_STRENGTH = 0.4;
-        const MAX_GENES = 23; // Increased for Breeding & Mating Ritual genes
+        const MAX_GENES = 24; // Increased for Litters gene
         const INITIAL_GENE_COUNT = MAX_GENES; 
         const BASE_SPEED = 0.001;
         const FLAGELLA_SPEED_BONUS = 25; 
@@ -194,10 +209,10 @@
         const SCAVENGER_THRESHOLD = 0.3;
         const CONSUMPTION_SIZE_BOOST = 0.3;
         const MAX_RADIUS_CAP = 600;
-        const LIFESPAN_PER_CELLCOUNT_SECONDS = 180; // Base lifespan factor
-        const LIFESPAN_EXTENSION_PER_CONSUMED_CELL_SECONDS = 45; // Lifespan gained per cell of consumed organism
-        const LIFESPAN_EXTENSION_FROM_HUSK = 45; // Lifespan gained from eating a husk
-        const MAX_NEARBY_CELLS_FOR_DUPLICATION = 5; // For asexual reproduction placement
+        const LIFESPAN_PER_CELLCOUNT_SECONDS = 180;
+        const LIFESPAN_EXTENSION_PER_CONSUMED_CELL_SECONDS = 45;
+        const LIFESPAN_EXTENSION_FROM_HUSK = 45;
+        const MAX_NEARBY_CELLS_FOR_DUPLICATION = 5;
         const CROWDING_CHECK_RADIUS = 22;
         const HUSK_COLOR = 'rgba(220, 220, 220, 0.7)';
         const HUSK_DEFAULT_RADIUS = 3;
@@ -216,8 +231,8 @@
         const FOOD_DISPENSER_RATE_SECONDS = 6;
         const FOOD_DISPENSER_HUSK_SPEED = 30;
         const NUM_SALT_REGIONS = 1;
-        const SALT_REGION_LIFESPAN_REDUCTION = 0.3; // Factor by which lifespan gain is reduced in salt
-        const SALT_REGION_MUTATION_BOOST = 0.3; // Boost to EVOLUTION_CHANCE_ON_REPRODUCTION
+        const SALT_REGION_LIFESPAN_REDUCTION = 0.3;
+        const SALT_REGION_MUTATION_BOOST = 0.3;
         const SALT_REGION_TINT_COLOR = 'rgba(255, 255, 95, 0.07)';
 
         // --- Plasmodium Parameters ---
@@ -241,11 +256,11 @@
         const HERD_FORCE = 0.03;
         const EGG_LAYING_THRESHOLD = 0.6;
         const EGG_DURATION_SECONDS = 140;
-        const EGG_LIFESPAN_FOOD_BONUS = 1.5; // Multiplier for lifespan gain if organism is an egg layer
+        const EGG_LIFESPAN_FOOD_BONUS = 1.5;
         const EGG_COLOR = 'rgba(255, 255, 255, 0.9)';
         const EGG_STRENGTH = 0.01;
         const DWELLING_GENE_THRESHOLD = 0.6;
-        const DWELLING_LIFESPAN_SATISFACTION_RATIO = 0.75; // Ratio of current to initial lifespan to trigger dwelling
+        const DWELLING_LIFESPAN_SATISFACTION_RATIO = 0.75;
         const DWELLING_FORCE = 0.04;
         const DWELLING_REACH_THRESHOLD = 10;
         const MYCELIUM_THRESHOLD = 0.65; 
@@ -253,7 +268,7 @@
         const WALL_AVOIDANCE_FORCE = 0.08; 
         const WALL_STEERING_FORCE = 0.06; 
         const WALL_DETECTION_RANGE_MULTIPLIER = 2.5; 
-        const STARVATION_THRESHOLD_LIFESPAN = 20; // Absolute timeToLive value to trigger starvation behavior
+        const STARVATION_THRESHOLD_LIFESPAN = 20;
         const STARVATION_GENE_ACTIVATION_THRESHOLD = 0.3; 
         const DRAG_FACTOR = 0.95; 
         const CURIOSITY_THRESHOLD = 0.5;
@@ -261,15 +276,20 @@
         const BASE_RANDOM_MOVEMENT_FACTOR = 0.6; 
         const MOTIVE_COMMITMENT_DURATION_SECONDS = 3;
 
-        // --- NEW GENES: Breeding & Mating Ritual Parameters ---
+        // --- Breeding & Mating Ritual Parameters ---
         const BREEDING_THRESHOLD = 0.8;
+        const HETEROGAMY_RANGE = 0.08; // NEW: For heterogamy
         const MATING_RITUAL_THRESHOLD = 0.7;
         const MATING_CONTACT_DURATION_SECONDS = 9;
-        const MIN_MATCHING_GENES_FOR_RITUAL = 19;
-        const GENE_MATCHING_TOLERANCE = 0.15; // How close gene float values must be to count as "matching"
+        const MIN_MATCHING_GENES_FOR_RITUAL = 21; // Adjusted from 19 to MAX_GENES - 4 for more flexibility
+        const GENE_MATCHING_TOLERANCE = 0.1;
         const MATING_COOLDOWN_SECONDS = 120;
         const MATING_ATTRACTION_FORCE = 0.04;
 
+        // --- Litters Gene Parameters (NEW) ---
+        const LITTERS_GENE_THRESHOLD_TIER1 = 0.8; // 1-2 offspring
+        const LITTERS_GENE_THRESHOLD_TIER2 = 0.9; // 1-4 offspring
+        const LITTERS_GENE_THRESHOLD_TIER3 = 0.99; // 1-8 offspring (using 0.99 for float precision)
 
         // --- Gene Indices & Names ---
         const GENE_HUE = 0; const GENE_BASE_SIZE = 1; const GENE_DUP_RATE = 2;
@@ -281,19 +301,19 @@
         const GENE_DWELLING = 16; const GENE_MYCELIUM = 17;
         const GENE_PATHFINDING = 18; const GENE_STARVATION = 19;
         const GENE_CURIOSITY = 20; 
-        const GENE_BREEDING = 21; // NEW
-        const GENE_MATING_RITUAL = 22; // NEW
+        const GENE_BREEDING = 21;
+        const GENE_MATING_RITUAL = 22;
+        const GENE_LITTERS = 23; // NEW
 
         const GENE_NAMES = [
             "Hue", "BaseSize", "Dup.Rate", "Flagella", "Hostility", "SightRange",
             "Fear", "Predator", "Complexity", "Scavenger", "SaltTolerance", "SaltAvoidance",
             "Plasmodium", "WallAttract", "HerdMental", "EggLayer", "Dwelling",
             "Mycelium", "Pathfinding", "Starvation", "Curiosity",
-            "Breeding", "MatingRitual" // NEW
+            "Breeding", "MatingRitual", "Litters" // NEW
         ];
 
-        // Gene activation thresholds (for display and some logic)
-        const GENE_THRESHOLDS = {
+        const GENE_THRESHOLDS = { // For display and some logic (Litters handled separately for display)
             [GENE_HOSTILITY]: HOSTILITY_THRESHOLD, [GENE_FEAR_FACTOR]: FEAR_FACTOR_THRESHOLD,
             [GENE_PREDATOR_DRIVE]: PREDATOR_DRIVE_THRESHOLD, [GENE_SCAVENGER]: SCAVENGER_THRESHOLD,
             [GENE_SALT_AVOIDANCE]: 0.5, [GENE_PLASMODIUM]: PLASMODIUM_EXPRESSION_THRESHOLD,
@@ -302,15 +322,16 @@
             [GENE_FLAGELLA]: 0.01, [GENE_MYCELIUM]: MYCELIUM_THRESHOLD,
             [GENE_PATHFINDING]: PATHFINDING_THRESHOLD, [GENE_STARVATION]: STARVATION_GENE_ACTIVATION_THRESHOLD,
             [GENE_CURIOSITY]: CURIOSITY_THRESHOLD,
-            [GENE_BREEDING]: BREEDING_THRESHOLD, // NEW
-            [GENE_MATING_RITUAL]: MATING_RITUAL_THRESHOLD // NEW
+            [GENE_BREEDING]: BREEDING_THRESHOLD,
+            [GENE_MATING_RITUAL]: MATING_RITUAL_THRESHOLD
+            // GENE_LITTERS is value-based, not a simple on/off threshold for display here
         };
 
         // --- Simulation State ---
         let organisms = []; let husks = []; let walls = [];
         let foodDispensers = []; let saltRegions = [];
         let simulationTime = 0; let lastTickTime = 0;
-        let totalAsexualDuplications = 0; let totalSexualBreedings = 0; // Counters
+        let totalAsexualDuplications = 0; let totalSexualBreedings = 0;
         let totalEvolutions = 0; let isPaused = false;
         let animationFrameId; let gameSpeedMultiplier = 1.0;
         let maxOrganismsLimit = 900; 
@@ -318,48 +339,39 @@
         let viewScale = 1.0; let viewOffsetX = 0; let viewOffsetY = 0;
         let worldWidth, worldHeight;
         let myceliumConnections = new Set(); 
+        let spectatingOrganismId = null; // NEW: For spectator mode
 
-        // Function to resize the canvas to fit its parent container
         function resizeCanvas() { 
             const parent = canvas.parentElement;
             canvas.width = parent.clientWidth;
             canvas.height = parent.clientHeight;
-            // Initialize world dimensions based on initial canvas size if not already set
             if (!worldWidth || !worldHeight) {
                  worldWidth = canvas.width * 1.5; 
                  worldHeight = canvas.height * 1.5;
             }
-            clampViewOffset(); // Adjust view offset after resizing
+            clampViewOffset();
         }
-        // Function to calculate the number of cells an organism has based on its complexity gene
         function calculateCellCount(genes) { 
             return Math.max(1, Math.floor(1 + (genes[GENE_COMPLEXITY] || 0) * 4));
         }
         
-        // Function to create a new organism
         function createOrganism(x, y, genesOverride, parentBirthX, parentBirthY) {
-            // Generate default genes if not overridden
             const defaultGenes = Array(MAX_GENES).fill(0).map(() => Math.random() * 0.3 + 0.1);
             const newGenes = genesOverride ? [...genesOverride] : defaultGenes;
-            // Ensure gene array has the correct length
             while (newGenes.length < MAX_GENES) { newGenes.push(Math.random() * 0.3 + 0.1); }
             
             const organism = {
-                id: Math.random().toString(36).substr(2, 9) + Date.now(), // Unique ID
-                x, y, // Current position
-                birthX: parentBirthX !== undefined ? parentBirthX : x, // Birth location (for dwelling gene)
-                birthY: parentBirthY !== undefined ? parentBirthY : y,
+                id: Math.random().toString(36).substr(2, 9) + Date.now(),
+                x, y, birthX: parentBirthX !== undefined ? parentBirthX : x, birthY: parentBirthY !== undefined ? parentBirthY : y,
                 genes: newGenes,
                 radius: 5, color: 'hsl(0, 100%, 50%)', actualDuplicationChance: DUPLICATION_CHANCE_PER_SECOND,
                 speed: BASE_SPEED, flagellaCount: 0, isHostile: false, sightRange: 0,
                 flees: false, hunts: false, isScavenging: false, seeksMate: false, 
                 targetOrganismId: null, targetHuskId: null, targetWallPoint: null, targetHerdCenter: null, targetDwellingPoint: null,
-                targetMateId: null, 
-                targetPoint: null, // General target point for movement
-                strength: 0, vx: (Math.random() - 0.5) * 0.1, vy: (Math.random() - 0.5) * 0.1, // Velocity
+                targetMateId: null, targetPoint: null,
+                strength: 0, vx: (Math.random() - 0.5) * 0.1, vy: (Math.random() - 0.5) * 0.1,
                 cellCount: 1, timeToLive: LIFESPAN_PER_CELLCOUNT_SECONDS, initialTimeToLive: LIFESPAN_PER_CELLCOUNT_SECONDS,
-                eatCooldown: 0, 
-                avoidsSalt: false, 
+                eatCooldown: 0, avoidsSalt: false, 
                 isPlasmodiumActive: false, plasmodiumEffectRadius: 0, plasmodiumTargetHuskId: null,
                 isAttractedToWalls: false, wallAttractionFactor: 0,
                 seeksHerd: false, herdDrive: 0,
@@ -367,24 +379,20 @@
                 canDwelling: false, isDwelling: false, dwellingGeneValue: 0,
                 isMyceliumActive: false, canPathfind: false, isCurious: false, 
                 committedMotive: null, commitmentTimer: 0, committedTargetId: null, committedTargetPos: null,
-                isBreeder: false,
+                isBreeder: false, isHeterogamous: false, // NEW: Heterogamy flag
                 canPerformMatingRitual: false,
-                matingPartnerId: null,      
-                matingContactTimer: 0,     
-                matingCooldownTimer: 0,    
+                matingPartnerId: null, matingContactTimer: 0, matingCooldownTimer: 0,
+                litterSizeRange: [1, 1] // NEW: For litters gene
             };
             organism.cellCount = calculateCellCount(organism.genes);
-            // Initial lifespan is proportional to cell count
             organism.initialTimeToLive = LIFESPAN_PER_CELLCOUNT_SECONDS * organism.cellCount;
             organism.timeToLive = organism.initialTimeToLive;
             return organism;
         }
         
-        // Function to interpret an organism's genes and update its properties
         function interpretGenes(organism) {
-            const g = organism.genes; // Shorthand for genes array
+            const g = organism.genes;
 
-            // Special properties if the organism is an egg
             if (organism.isEgg) { 
                 organism.color = EGG_COLOR; organism.speed = 0; organism.flagellaCount = 0;
                 organism.isHostile = false; organism.sightRange = 0; organism.strength = EGG_STRENGTH; 
@@ -392,25 +400,23 @@
                 organism.isPlasmodiumActive = false; organism.plasmodiumEffectRadius = 0;
                 organism.canDwelling = false; organism.isDwelling = false;
                 organism.isMyceliumActive = false; organism.canPathfind = false; organism.isCurious = false;
-                organism.isBreeder = false; organism.canPerformMatingRitual = false; return; 
+                organism.isBreeder = false; organism.isHeterogamous = false; organism.canPerformMatingRitual = false; return; 
             }
             
-            // General gene interpretation
             organism.color = `hsl(${Math.floor((g[GENE_HUE] || 0) * 360)}, 70%, 60%)`;
-            organism.cellCount = calculateCellCount(g); // Calculate cell count first
+            organism.cellCount = calculateCellCount(g);
             const minRadius = 3; const maxRadiusForGene = 8;
             let baseRadius = minRadius + ((g[GENE_BASE_SIZE] || 0) * (maxRadiusForGene - minRadius));
-            const complexityFactor = 1 + (g[GENE_COMPLEXITY] || 0) * 1; // Complexity increases radius
+            const complexityFactor = 1 + (g[GENE_COMPLEXITY] || 0) * 1;
             organism.radius = baseRadius * complexityFactor;
-            organism.radius = Math.min(organism.radius, MAX_RADIUS_CAP); // Cap maximum radius
+            organism.radius = Math.min(organism.radius, MAX_RADIUS_CAP);
 
             const dupRateGene = g[GENE_DUP_RATE] === undefined ? 0.5 : g[GENE_DUP_RATE];
-            // MODIFIED: Duplication chance is now affected by cell count
             organism.actualDuplicationChance = (DUPLICATION_CHANCE_PER_SECOND * (0.5 + dupRateGene)) / Math.max(1, organism.cellCount);
             
             const rawFlagellaValue = g[GENE_FLAGELLA] || 0;
-            organism.flagellaCount = Math.floor(rawFlagellaValue * 3); // Number of flagella
-            if (rawFlagellaValue > 0.01) { // If flagella gene is expressed
+            organism.flagellaCount = Math.floor(rawFlagellaValue * 3);
+            if (rawFlagellaValue > 0.01) {
                 const effectiveFlagellaForSpeed = Math.max(1, organism.flagellaCount); 
                 organism.speed = BASE_SPEED + effectiveFlagellaForSpeed * FLAGELLA_SPEED_BONUS;
             } else {
@@ -419,7 +425,7 @@
             
             organism.isHostile = (g[GENE_HOSTILITY] || 0) > HOSTILITY_THRESHOLD;
             organism.sightRange = (g[GENE_SIGHT_RANGE] || 0) * 150;
-            organism.strength = organism.cellCount; // Strength is based on cell count
+            organism.strength = organism.cellCount;
             organism.isScavenger = !organism.isHostile && (g[GENE_SCAVENGER] || 0) > SCAVENGER_THRESHOLD && organism.sightRange > 0;
             organism.saltToleranceFactor = g[GENE_SALT_TOLERANCE] || 0; 
             organism.avoidsSalt = (g[GENE_SALT_AVOIDANCE] || 0) > 0.5;
@@ -450,35 +456,46 @@
             organism.isMyceliumActive = (g[GENE_MYCELIUM] || 0) > MYCELIUM_THRESHOLD;
             organism.canPathfind = (g[GENE_PATHFINDING] || 0) > PATHFINDING_THRESHOLD && organism.sightRange > 0;
             organism.isCurious = (g[GENE_CURIOSITY] || 0) > CURIOSITY_THRESHOLD;
-            organism.isBreeder = (g[GENE_BREEDING] || 0) > BREEDING_THRESHOLD;
+            
+            // Breeding and Heterogamy
+            const breedingVal = g[GENE_BREEDING] || 0;
+            organism.isBreeder = breedingVal > BREEDING_THRESHOLD;
+            organism.isHeterogamous = breedingVal >= (BREEDING_THRESHOLD) && 
+                                     breedingVal <= (BREEDING_THRESHOLD + HETEROGAMY_RANGE);
+
             organism.canPerformMatingRitual = organism.isBreeder && (g[GENE_MATING_RITUAL] || 0) > MATING_RITUAL_THRESHOLD;
+
+            // Litters Gene
+            const litterVal = g[GENE_LITTERS] || 0;
+            if (organism.isBreeder) { // Litters only apply if capable of breeding
+                if (litterVal >= LITTERS_GENE_THRESHOLD_TIER3) organism.litterSizeRange = [1, 8];
+                else if (litterVal >= LITTERS_GENE_THRESHOLD_TIER2) organism.litterSizeRange = [1, 4];
+                else if (litterVal >= LITTERS_GENE_THRESHOLD_TIER1) organism.litterSizeRange = [1, 2];
+                else organism.litterSizeRange = [1, 1];
+            } else {
+                organism.litterSizeRange = [1, 1]; // Default if not a breeder
+            }
         }
 
-        // Function to apply mutations to genes during reproduction
         function applyMutationsAndHueShift(genesArray, isInSaltRegion) {
             const mutatedGenes = [...genesArray]; 
-            let thresholdCrossedForHueShift = false; // Flag to shift hue if a major gene threshold is crossed
+            let thresholdCrossedForHueShift = false;
             let currentEvolutionChance = EVOLUTION_CHANCE_ON_REPRODUCTION;
-            // Salt regions can increase mutation chance if organism is not salt tolerant
             if (isInSaltRegion) {
                 currentEvolutionChance += SALT_REGION_MUTATION_BOOST * (1 - (mutatedGenes[GENE_SALT_TOLERANCE] || 0));
             }
 
-            // Primary mutation
             if (Math.random() < currentEvolutionChance) {
                 totalEvolutions++;
                 let geneIndexToMutate;
-                // Avoid mutating hue directly, pick another gene
                 if (MAX_GENES > 1) { do { geneIndexToMutate = Math.floor(Math.random() * MAX_GENES); } while (geneIndexToMutate === GENE_HUE); }
-                else { geneIndexToMutate = 0; } // Handle case with only one gene (hue)
+                else { geneIndexToMutate = 0; }
 
                 const oldValue = mutatedGenes[geneIndexToMutate];
                 mutatedGenes[geneIndexToMutate] += (Math.random() - 0.5) * GENE_MUTATION_STRENGTH;
-                // Clamp gene values (complexity can't be negative)
                 if (geneIndexToMutate === GENE_COMPLEXITY) { mutatedGenes[geneIndexToMutate] = Math.max(0, mutatedGenes[geneIndexToMutate]); }
                 else { mutatedGenes[geneIndexToMutate] = Math.max(0, Math.min(1, mutatedGenes[geneIndexToMutate])); }
                 
-                // Check if a gene threshold was crossed for hue shift
                 if (geneIndexToMutate !== GENE_HUE && GENE_THRESHOLDS[geneIndexToMutate] !== undefined) {
                     const threshold = GENE_THRESHOLDS[geneIndexToMutate];
                     if ((oldValue < threshold && mutatedGenes[geneIndexToMutate] >= threshold) || (oldValue >= threshold && mutatedGenes[geneIndexToMutate] < threshold)) {
@@ -487,7 +504,6 @@
                 }
             }
 
-            // Secondary mutation (less likely)
             if (Math.random() < currentEvolutionChance && Math.random() < SECONDARY_MUTATION_CHANCE) {
                 totalEvolutions++;
                 let geneIndexToMutateSecondary;
@@ -507,48 +523,21 @@
                 }
             }
             
-            // Apply hue shift if a significant mutation occurred
             if (thresholdCrossedForHueShift && MAX_GENES > 0 && mutatedGenes[GENE_HUE] !== undefined) {
                 mutatedGenes[GENE_HUE] = (mutatedGenes[GENE_HUE] || 0) + (Math.random() - 0.5) * MINOR_HUE_SHIFT_STRENGTH;
-                mutatedGenes[GENE_HUE] = (mutatedGenes[GENE_HUE] + 1) % 1; // Keep hue within 0-1 range
+                mutatedGenes[GENE_HUE] = (mutatedGenes[GENE_HUE] + 1) % 1;
             }
             return { finalGenes: mutatedGenes, evolutionOccurredThisStep: thresholdCrossedForHueShift }; 
         }
 
-        // Function for asexual reproduction (duplication)
         function asexualReproduceOrganism(parent, offspringX, offspringY, isInSaltRegion) {
+            // This function now returns the offspring or null if limit reached
+            if ((organisms.length + newOrganisms.length) >= maxOrganismsLimit) return null;
+
             totalAsexualDuplications++; 
             const { finalGenes } = applyMutationsAndHueShift(parent.genes, isInSaltRegion);
             const offspring = createOrganism(offspringX, offspringY, finalGenes, parent.birthX, parent.birthY);
-            // If parent is an egg layer, offspring starts as an egg
             if (parent.isEggLayer) { 
-                offspring.isEgg = true; offspring.eggTimer = EGG_DURATION_SECONDS;
-                offspring.strength = EGG_STRENGTH; offspring.birthX = offspringX; offspring.birthY = offspringY;
-            }
-            interpretGenes(offspring); // Apply genetic traits to the new organism
-            return offspring;
-        }
-
-        // Function for sexual reproduction (breeding)
-        function sexualReproduceOrganism(parent1, parent2, offspringX, offspringY, offspringInSaltRegion) {
-            totalSexualBreedings++; 
-            
-            // Mix genes from both parents
-            const mixedGenes = [];
-            for (let i = 0; i < MAX_GENES; i++) {
-                mixedGenes[i] = (Math.random() < 0.5) ? parent1.genes[i] : parent2.genes[i];
-            }
-
-            const { finalGenes } = applyMutationsAndHueShift(mixedGenes, offspringInSaltRegion);
-            
-            // Determine birth location near parents
-            const birthX = (parent1.x + parent2.x) / 2 + (Math.random() - 0.5) * (parent1.radius * 0.5);
-            const birthY = (parent1.y + parent2.y) / 2 + (Math.random() - 0.5) * (parent1.radius * 0.5);
-
-            const offspring = createOrganism(offspringX, offspringY, finalGenes, birthX, birthY); 
-
-            // If either parent is an egg layer, offspring starts as an egg
-            if (parent1.isEggLayer || parent2.isEggLayer) { 
                 offspring.isEgg = true; offspring.eggTimer = EGG_DURATION_SECONDS;
                 offspring.strength = EGG_STRENGTH; offspring.birthX = offspringX; offspring.birthY = offspringY;
             }
@@ -556,27 +545,59 @@
             return offspring;
         }
 
-        // --- Utility functions for geometry and collision detection ---
+        // sexualReproduceOrganism now returns an array of offspring
+        function sexualReproduceOrganism(parent1, parent2, offspringBaseX, offspringBaseY, offspringInSaltRegion) {
+            totalSexualBreedings++; // Increment once per mating event
+            
+            const newOffspringArray = [];
+            // Determine number of offspring based on parent1's litter gene (can be customized)
+            const minOffspring = parent1.litterSizeRange[0];
+            const maxOffspring = parent1.litterSizeRange[1];
+            const numOffspring = Math.floor(Math.random() * (maxOffspring - minOffspring + 1)) + minOffspring;
+
+            for (let i = 0; i < numOffspring; i++) {
+                if ((organisms.length + newOrganisms.length + newOffspringArray.length) >= maxOrganismsLimit) break; // Check limit for each offspring
+
+                const mixedGenes = [];
+                for (let j = 0; j < MAX_GENES; j++) {
+                    mixedGenes[j] = (Math.random() < 0.5) ? parent1.genes[j] : parent2.genes[j];
+                }
+                const { finalGenes } = applyMutationsAndHueShift(mixedGenes, offspringInSaltRegion);
+                
+                const offspringX = offspringBaseX + (Math.random() - 0.5) * parent1.radius * 0.5; // Slight position variation
+                const offspringY = offspringBaseY + (Math.random() - 0.5) * parent1.radius * 0.5;
+
+                const birthX = (parent1.x + parent2.x) / 2 + (Math.random() - 0.5) * (parent1.radius * 0.25);
+                const birthY = (parent1.y + parent2.y) / 2 + (Math.random() - 0.5) * (parent1.radius * 0.25);
+
+                const offspring = createOrganism(offspringX, offspringY, finalGenes, birthX, birthY); 
+
+                if (parent1.isEggLayer || parent2.isEggLayer) { 
+                    offspring.isEgg = true; offspring.eggTimer = EGG_DURATION_SECONDS;
+                    offspring.strength = EGG_STRENGTH; offspring.birthX = offspringX; offspring.birthY = offspringY;
+                }
+                interpretGenes(offspring);
+                newOffspringArray.push(offspring);
+            }
+            return newOffspringArray;
+        }
+
         function onSegment(px, py, qx, qy, rx, ry) { return (qx <= Math.max(px, rx) && qx >= Math.min(px, rx) && qy <= Math.max(py, ry) && qy >= Math.min(py, ry)); }
         function orientation(px, py, qx, qy, rx, ry) { const val = (qy - py) * (rx - qx) - (qx - px) * (ry - qy); if (val === 0) return 0; return (val > 0) ? 1 : 2; }
         function segmentsIntersect(p1x, p1y, q1x, q1y, p2x, p2y, q2x, q2y) { const o1 = orientation(p1x, p1y, q1x, q1y, p2x, p2y); const o2 = orientation(p1x, p1y, q1x, q1y, q2x, q2y); const o3 = orientation(p2x, p2y, q2x, q2y, p1x, p1y); const o4 = orientation(p2x, p2y, q2x, q2y, q1x, q1y); if (o1 !== 0 && o2 !== 0 && o3 !== 0 && o4 !== 0) { if (o1 !== o2 && o3 !== o4) return true; } if (o1 === 0 && onSegment(p1x, p1y, p2x, p2y, q1x, q1y)) return true; if (o2 === 0 && onSegment(p1x, p1y, q2x, q2y, q1x, q1y)) return true; if (o3 === 0 && onSegment(p2x, p2y, p1x, p1y, q2x, q2y)) return true; if (o4 === 0 && onSegment(p2x, p2y, q1x, q1y, q2x, q2y)) return true; return false;  }
         function getClosestPointOnLineSegment(pX,pY,l1X,l1Y,l2X,l2Y){ const l2_sq=(l1X-l2X)**2+(l1Y-l2Y)**2; if(l2_sq===0)return {x:l1X,y:l1Y, distSq: (pX-l1X)**2 + (pY-l1Y)**2}; let t=((pX-l1X)*(l2X-l1X)+(pY-l1Y)*(l2Y-l1Y))/l2_sq; t=Math.max(0,Math.min(1,t)); const closestX = l1X+t*(l2X-l1X); const closestY = l1Y+t*(l2Y-l1Y); return {x:closestX, y:closestY, distSq: (pX-closestX)**2 + (pY-closestY)**2 }; }
         
-        // Function to generate the environment (walls, food dispensers, salt regions)
         function generateEnvironment() { 
             walls = []; foodDispensers = []; saltRegions = []; 
             let attempts = 0; const maxAttemptsPerWall = 20; 
-            // Generate cave walls
             for (let i = 0; i < NUM_CAVE_WALLS && attempts < NUM_CAVE_WALLS * maxAttemptsPerWall; ) { 
                 let x1_cand, y1_cand, x2_cand, y2_cand; 
                 let length = MIN_WALL_LENGTH + Math.random() * (MAX_WALL_LENGTH - MIN_WALL_LENGTH); 
                 let connectedToThisWall = null; let newWallIsValid = true; 
-                // Try to connect to an existing wall
                 if (walls.length > 0 && Math.random() < WALL_CONNECTION_PROBABILITY) { 
                     const parentWall = walls[Math.floor(Math.random() * walls.length)]; 
                     connectedToThisWall = parentWall; 
                     let connectionPointX, connectionPointY, parentOtherEndX, parentOtherEndY; 
-                    // Pick an endpoint of the parent wall
                     if (Math.random() < 0.5) { connectionPointX = parentWall.x1; connectionPointY = parentWall.y1; parentOtherEndX = parentWall.x2; parentOtherEndY = parentWall.y2; } 
                     else { connectionPointX = parentWall.x2; connectionPointY = parentWall.y2; parentOtherEndX = parentWall.x1; parentOtherEndY = parentWall.y1; } 
                     x1_cand = connectionPointX; y1_cand = connectionPointY; 
@@ -593,19 +614,17 @@
                         const newWallAngle = parentSegmentAngle + signedDeflection; 
                         x2_cand = x1_cand + Math.cos(newWallAngle) * length; y2_cand = y1_cand + Math.sin(newWallAngle) * length; 
                     } 
-                } else { // Or generate a random wall
+                } else { 
                     x1_cand = Math.random() * worldWidth; y1_cand = Math.random() * worldHeight; 
                     const angle = Math.random() * Math.PI * 2; 
                     x2_cand = x1_cand + Math.cos(angle) * length; y2_cand = y1_cand + Math.sin(angle) * length; 
                 } 
                 if (!newWallIsValid) { attempts++; continue; } 
-                // Clamp wall coordinates to world boundaries
                 x1_cand = Math.max(WALL_THICKNESS/2, Math.min(worldWidth - WALL_THICKNESS/2, x1_cand)); 
                 y1_cand = Math.max(WALL_THICKNESS/2, Math.min(worldHeight - WALL_THICKNESS/2, y1_cand)); 
                 x2_cand = Math.max(WALL_THICKNESS/2, Math.min(worldWidth - WALL_THICKNESS/2, x2_cand)); 
                 y2_cand = Math.max(WALL_THICKNESS/2, Math.min(worldHeight - WALL_THICKNESS/2, y2_cand)); 
                 if (Math.sqrt((x2_cand - x1_cand)**2 + (y2_cand - y1_cand)**2) < MIN_WALL_LENGTH * 0.5) { newWallIsValid = false; } 
-                // Check for intersections with existing walls
                 if (newWallIsValid) { 
                     for (const existingWall of walls) { 
                         if (existingWall === connectedToThisWall) continue; 
@@ -617,11 +636,9 @@
                 if (newWallIsValid) { walls.push({ x1: x1_cand, y1: y1_cand, x2: x2_cand, y2: y2_cand, thickness: WALL_THICKNESS }); i++; } 
                 attempts++; 
             } 
-            // Generate food dispensers
             for (let i = 0; i < NUM_FOOD_DISPENSERS; i++) { 
                 foodDispensers.push({ x: Math.random()*worldWidth, y: Math.random()*worldHeight, radius:10, nextDispenseTime: simulationTime + Math.random()*FOOD_DISPENSER_RATE_SECONDS*2 }); 
             } 
-            // Generate salt regions
             for (let i = 0; i < NUM_SALT_REGIONS; i++) { 
                 const regionWidth = worldWidth*(0.1+Math.random()*0.4); 
                 const regionHeight = worldHeight*(0.1+Math.random()*0.4); 
@@ -629,12 +646,13 @@
             } 
         }
         
-        // Function to initialize or reset the simulation
         function initSimulation() {
             organisms = []; husks = []; simulationTime = 0; lastTickTime = performance.now();
             totalAsexualDuplications = 0; totalSexualBreedings = 0; totalEvolutions = 0; 
             isPaused = false;
             pauseButton.textContent = "Pause"; viewScale = 1.0; viewOffsetX = 0; viewOffsetY = 0; 
+            spectatingOrganismId = null; // Reset spectating
+            organismInfoPanel.classList.add('hidden'); // Hide panel
             
             gameSpeedMultiplier = parseFloat(speedSlider.value); 
             speedValueEl.textContent = `${gameSpeedMultiplier.toFixed(1)}x`;
@@ -646,7 +664,6 @@
             if (!worldWidth) { worldWidth = canvas.width * 1.5; worldHeight = canvas.height * 1.5; }
             generateEnvironment();
             
-            // Define initial genes for the first organism
             const initialGenes = Array(MAX_GENES).fill(0); 
             initialGenes[GENE_HUE]=Math.random(); initialGenes[GENE_BASE_SIZE]=0.1; initialGenes[GENE_DUP_RATE]=0.1; initialGenes[GENE_FLAGELLA]=0;
             initialGenes[GENE_HOSTILITY]=0.3; initialGenes[GENE_SIGHT_RANGE]=0; initialGenes[GENE_FEAR_FACTOR]=0.2; initialGenes[GENE_PREDATOR_DRIVE]=0.2;
@@ -658,31 +675,33 @@
             initialGenes[GENE_STARVATION] = 0.2; initialGenes[GENE_CURIOSITY] = 0.3;
             initialGenes[GENE_BREEDING] = 0.25; 
             initialGenes[GENE_MATING_RITUAL] = 0.2; 
-
+            initialGenes[GENE_LITTERS] = 0.1; // NEW: Initial litter gene value
 
             const initialOrganism = createOrganism(worldWidth/2, worldHeight/2, initialGenes);
             interpretGenes(initialOrganism); organisms.push(initialOrganism);
-            if (animationFrameId) cancelAnimationFrame(animationFrameId); // Stop previous game loop if any
-            gameLoop(); // Start the new game loop
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            gameLoop();
         }
 
-        // Function to update the displayed statistics
         function updateStats() { 
             organismCountEl.textContent=organisms.length; 
             elapsedTimeEl.textContent=Math.floor(simulationTime); 
             duplicationCountEl.textContent=totalAsexualDuplications; 
             breedingCountEl.textContent=totalSexualBreedings;     
             evolutionCountEl.textContent=totalEvolutions; 
+            if (spectatingOrganismId) {
+                const spectated = organisms.find(o => o.id === spectatingOrganismId);
+                spectatingStatusEl.textContent = spectated ? `ID: ...${spectated.id.slice(-6)}` : "None";
+            } else {
+                spectatingStatusEl.textContent = "None";
+            }
         }
-        // --- Viewport and coordinate transformation functions ---
         function screenToWorld(screenX, screenY) { const rect=canvas.getBoundingClientRect(); const canvasX=screenX-rect.left; const canvasY=screenY-rect.top; return {x:(canvasX/viewScale)+viewOffsetX, y:(canvasY/viewScale)+viewOffsetY}; }
         function worldToScreen(worldX, worldY) { return {x:(worldX-viewOffsetX)*viewScale, y:(worldY-viewOffsetY)*viewScale}; }
         function clampViewOffset() { const minScaleX=canvas.width/worldWidth; const minScaleY=canvas.height/worldHeight; const minScale=Math.max(minScaleX,minScaleY); viewScale=Math.max(minScale,viewScale); viewScale=Math.min(5,viewScale); const scaledCanvasWidth=canvas.width/viewScale; const scaledCanvasHeight=canvas.height/viewScale; let minViewOffsetX=0; let maxViewOffsetX=worldWidth-scaledCanvasWidth; let minViewOffsetY=0; let maxViewOffsetY=worldHeight-scaledCanvasHeight; if(scaledCanvasWidth>=worldWidth){viewOffsetX=(worldWidth-scaledCanvasWidth)/2;}else{viewOffsetX=Math.max(minViewOffsetX,Math.min(viewOffsetX,maxViewOffsetX));} if(scaledCanvasHeight>=worldHeight){viewOffsetY=(worldHeight-scaledCanvasHeight)/2;}else{viewOffsetY=Math.max(minViewOffsetY,Math.min(viewOffsetY,maxViewOffsetY));}}
         
-        // Function to check if a point is within a salt region
         function isPointInSaltRegion(x,y){ for(const region of saltRegions){if(x>=region.x && x<=region.x+region.width && y>=region.y && y<=region.y+region.height){return region;}} return null;}
         
-        // Function to find the closest point on any wall to an organism
         function findClosestWallPoint(organism) { 
             let closestWall = null; let closestPoint = null; let minDistanceSq = Infinity; 
             for (const wall of walls) { 
@@ -694,56 +713,64 @@
             return closestPoint; 
         }
 
+        // Store new organisms temporarily during update
+        let newOrganisms = []; 
 
-        // Main update function for the simulation logic
         function update(currentTime) {
-            if (isPaused) return; // Do nothing if paused
-            let rawDeltaTime = (currentTime - lastTickTime) / 1000; // Time since last frame in seconds
-            if (rawDeltaTime <= 0) { lastTickTime = currentTime; return; } // Avoid issues with timestamp irregularities
-            const deltaTime = rawDeltaTime * gameSpeedMultiplier; // Adjusted time step
-            simulationTime += deltaTime; // Increment total simulation time
+            if (isPaused) return;
+            let rawDeltaTime = (currentTime - lastTickTime) / 1000;
+            if (rawDeltaTime <= 0) { lastTickTime = currentTime; return; }
+            const deltaTime = rawDeltaTime * gameSpeedMultiplier;
+            simulationTime += deltaTime;
 
-            const newOrganisms = []; // Array for newly created organisms in this tick
-            const deadOrConsumedOrganismIds = new Set(); // Set to track IDs of organisms that died or were eaten
-            const consumedHuskIds = new Set(); // Set to track IDs of husks that were eaten
+            newOrganisms = []; // Clear for this tick
+            const deadOrConsumedOrganismIds = new Set();
+            const consumedHuskIds = new Set();
 
-            // --- Mycelium Network Logic ---
-            myceliumConnections.clear(); // Clear previous connections
-            const visitedMyceliumOrgs = new Set(); // Track visited organisms to avoid redundant processing
+            // --- Camera Tracking for Spectator Mode ---
+            if (spectatingOrganismId) {
+                const followedOrganism = organisms.find(o => o.id === spectatingOrganismId);
+                if (followedOrganism) {
+                    viewOffsetX = followedOrganism.x - (canvas.width / viewScale / 2);
+                    viewOffsetY = followedOrganism.y - (canvas.height / viewScale / 2);
+                    clampViewOffset();
+                } else { // Organism died or disappeared
+                    spectatingOrganismId = null;
+                    organismInfoPanel.classList.add('hidden');
+                }
+            }
+
+            myceliumConnections.clear(); 
+            const visitedMyceliumOrgs = new Set();
             organisms.forEach(org_myc => { 
-                // Skip eggs, non-mycelium organisms, already visited, or mobile (flagellated) organisms
                 if (org_myc.isEgg || org_myc.genes[GENE_MYCELIUM] < MYCELIUM_THRESHOLD || visitedMyceliumOrgs.has(org_myc.id) || org_myc.genes[GENE_FLAGELLA] >= 0.01) {
                     return;
                 }
                 const network = []; const queue = [org_myc]; visitedMyceliumOrgs.add(org_myc.id);
                 let head = 0;
-                // Breadth-first search to find connected mycelium organisms
                 while (head < queue.length) {
                     const currentOrg = queue[head++]; network.push(currentOrg);
                     organisms.forEach(otherOrg => {
                         if (otherOrg.isEgg || otherOrg.id === currentOrg.id || visitedMyceliumOrgs.has(otherOrg.id) || otherOrg.genes[GENE_MYCELIUM] < MYCELIUM_THRESHOLD || otherOrg.genes[GENE_FLAGELLA] >= 0.05) return;
                         const dx = otherOrg.x - currentOrg.x; const dy = otherOrg.y - currentOrg.y; const distance = Math.sqrt(dx * dx + dy * dy);
-                        // If close enough, add to network and queue
                         if (distance < currentOrg.radius + otherOrg.radius + 12) { 
                             queue.push(otherOrg); visitedMyceliumOrgs.add(otherOrg.id); 
-                            const connectionKey = [currentOrg.id, otherOrg.id].sort().join('-'); // Unique key for connection
+                            const connectionKey = [currentOrg.id, otherOrg.id].sort().join('-');
                             myceliumConnections.add(connectionKey); 
                         }
                     });
                 }
-                // Share resources (lifespan) within the network
                 if (network.length > 1) { 
                     let totalLifespan = 0; network.forEach(nOrg => { totalLifespan += nOrg.timeToLive; }); 
                     const averageLifespan = totalLifespan / network.length; 
                     network.forEach(nOrg => { 
-                        if (nOrg.timeToLive < averageLifespan) { nOrg.timeToLive += deltaTime * 3; } // Gain lifespan if below average
-                        else if (nOrg.timeToLive > averageLifespan) { nOrg.timeToLive -= deltaTime * 2; } // Lose lifespan if above average
-                        nOrg.timeToLive = Math.max(0, Math.min(nOrg.timeToLive, nOrg.initialTimeToLive * 3)); // Clamp lifespan
+                        if (nOrg.timeToLive < averageLifespan) { nOrg.timeToLive += deltaTime * 3; } 
+                        else if (nOrg.timeToLive > averageLifespan) { nOrg.timeToLive -= deltaTime * 2; } 
+                        nOrg.timeToLive = Math.max(0, Math.min(nOrg.timeToLive, nOrg.initialTimeToLive * 3)); 
                     }); 
                 }
             });
             
-            // --- Food Dispenser Logic ---
             foodDispensers.forEach(dispenser => { 
                 if (simulationTime >= dispenser.nextDispenseTime) { 
                     const angle = Math.random()*Math.PI*2; 
@@ -752,65 +779,62 @@
                     dispenser.nextDispenseTime = simulationTime + (Math.random()*0.5+0.75)*FOOD_DISPENSER_RATE_SECONDS;
                 }
             });
-            // Update dispensed husks (movement, lifespan, boundary checks)
             husks.forEach(husk => { 
                 if (husk.isDispensed) { 
                     husk.x+=husk.vx*deltaTime; husk.y+=husk.vy*deltaTime; 
-                    husk.vx*=0.98; husk.vy*=0.98; // Apply drag
+                    husk.vx*=0.98; husk.vy*=0.98; 
                     husk.timeToLiveDispensed-=deltaTime; 
-                    if(husk.timeToLiveDispensed<=0){consumedHuskIds.add(husk.id);} // Husk expires
-                    // Remove husk if it goes out of bounds or hits a wall
+                    if(husk.timeToLiveDispensed<=0){consumedHuskIds.add(husk.id);} 
                     if(husk.x-husk.radius<0||husk.x+husk.radius>worldWidth||husk.y-husk.radius<0||husk.y+husk.radius>worldHeight){consumedHuskIds.add(husk.id);} 
                     walls.forEach(wall=>{const closestPoint=getClosestPointOnLineSegment(husk.x,husk.y,wall.x1,wall.y1,wall.x2,wall.y2); const dx=husk.x-closestPoint.x; const dy=husk.y-closestPoint.y; const distSq=dx*dx+dy*dy; const totalRadiusSq=(husk.radius+wall.thickness/2)**2; if(distSq<totalRadiusSq){consumedHuskIds.add(husk.id);}});
                 }
             });
 
-            // --- Organism Update Loop ---
             organisms.forEach(org => {
-                if(deadOrConsumedOrganismIds.has(org.id))return; // Skip if already marked as dead/consumed
+                if(deadOrConsumedOrganismIds.has(org.id))return;
                 
                 if(org.eatCooldown>0)org.eatCooldown-=deltaTime; 
                 const currentSaltRegion=isPointInSaltRegion(org.x,org.y);
                 
-                // --- Egg Logic ---
                 if (org.isEgg) { 
                     org.eggTimer -= deltaTime;
-                    if (org.eggTimer <= 0) { // Egg hatches
+                    if (org.eggTimer <= 0) {
                         org.isEgg = false; org.birthX = org.x; org.birthY = org.y;
-                        org.initialTimeToLive = LIFESPAN_PER_CELLCOUNT_SECONDS * org.cellCount; // Set initial lifespan
+                        org.initialTimeToLive = LIFESPAN_PER_CELLCOUNT_SECONDS * org.cellCount;
                         org.timeToLive = org.initialTimeToLive; 
-                        interpretGenes(org); // Re-interpret genes now that it's not an egg
-                    } else { // If still an egg, no movement
+                        interpretGenes(org);
+                    } else { 
                         org.vx = 0; org.vy = 0; 
                         org.x=Math.max(org.radius,Math.min(worldWidth-org.radius,org.x)); 
                         org.y=Math.max(org.radius,Math.min(worldHeight-org.radius,org.y)); 
-                        return; // Skip rest of update for eggs
+                        return;
                     }
                 }
 
-                // --- Lifespan Depletion and Death Check ---
-                org.timeToLive -= org.cellCount * deltaTime; // Lifespan depletes based on cell count
-                if (org.timeToLive <= 0) { // Organism dies if lifespan runs out
+                org.timeToLive -= org.cellCount * deltaTime;
+                if (org.timeToLive <= 0) {
                     deadOrConsumedOrganismIds.add(org.id); 
-                    husks.push({id:'husk_'+org.id+'_'+Date.now(),x:org.x,y:org.y,radius:org.radius*0.5,cellCount:org.cellCount}); // Leave a husk
-                    return; // Skip rest of update for dead organism
+                    husks.push({id:'husk_'+org.id+'_'+Date.now(),x:org.x,y:org.y,radius:org.radius*0.5,cellCount:org.cellCount});
+                    if (org.id === spectatingOrganismId) { // Stop spectating if died
+                        spectatingOrganismId = null;
+                        organismInfoPanel.classList.add('hidden');
+                    }
+                    return;
                 }
 
                 if (org.matingCooldownTimer > 0) {
                     org.matingCooldownTimer -= deltaTime;
                 }
                 
-                // --- Motive Commitment Timer ---
                 if (org.commitmentTimer > 0) { 
                     org.commitmentTimer -= deltaTime;
-                    if (org.commitmentTimer <= 0) { // Commitment ends
+                    if (org.commitmentTimer <= 0) {
                         org.committedMotive = null;
                         org.committedTargetId = null;
                         org.committedTargetPos = null;
                     }
                 }
 
-                // --- Plasmodium Husk Detection ---
                 org.plasmodiumTargetHuskId = null; 
                 if (org.isPlasmodiumActive && org.plasmodiumEffectRadius > 0) {
                     let closestHuskInPlasma = null; let minDistSqToHuskInPlasma = Infinity;
@@ -826,164 +850,153 @@
                     if (closestHuskInPlasma) { org.plasmodiumTargetHuskId = closestHuskInPlasma.id; }
                 }
                 
-                // --- Reproduction Logic (Sexual and Asexual) ---
-                if (org.isBreeder) { // Sexual Reproduction
-                    if (org.matingCooldownTimer <= 0 && !org.matingPartnerId) { 
-                        let currentMate = null;
-                        if (org.targetMateId) { // Check if already targeting a mate
-                            currentMate = organisms.find(o => o.id === org.targetMateId && !deadOrConsumedOrganismIds.has(o.id) && o.isBreeder && o.matingCooldownTimer <= 0);
-                        }
+                // --- Reproduction Logic ---
+                // Sexual Reproduction (attempt if breeder gene is high enough)
+                if (org.isBreeder && org.matingCooldownTimer <= 0 && !org.matingPartnerId) {
+                    let currentMate = null;
+                    if (org.targetMateId) {
+                        currentMate = organisms.find(o => o.id === org.targetMateId && !deadOrConsumedOrganismIds.has(o.id) && o.isBreeder && o.matingCooldownTimer <= 0);
+                    }
 
-                        if (currentMate) { // If has a valid mate target
-                             const dx = currentMate.x - org.x; const dy = currentMate.y - org.y;
-                             const distSq = dx*dx + dy*dy;
-                             if (distSq < (org.radius + currentMate.radius + 2)**2) { // If in contact
-                                if (!currentMate.matingPartnerId || currentMate.matingPartnerId === org.id) { // If mate is available or targeting this org
-                                    org.matingPartnerId = currentMate.id;
-                                    currentMate.matingPartnerId = org.id; 
-                                    org.matingContactTimer += deltaTime;
-                                    currentMate.matingContactTimer += deltaTime; 
+                    if (currentMate) {
+                         const dx = currentMate.x - org.x; const dy = currentMate.y - org.y;
+                         const distSq = dx*dx + dy*dy;
+                         if (distSq < (org.radius + currentMate.radius + 2)**2) {
+                            if (!currentMate.matingPartnerId || currentMate.matingPartnerId === org.id) {
+                                org.matingPartnerId = currentMate.id;
+                                currentMate.matingPartnerId = org.id; 
+                                org.matingContactTimer += deltaTime;
+                                currentMate.matingContactTimer += deltaTime; 
 
-                                    if (org.matingContactTimer >= MATING_CONTACT_DURATION_SECONDS) { // If contact duration met
-                                        const offspringX = (org.x + currentMate.x) / 2 + (Math.random() - 0.5) * org.radius;
-                                        const offspringY = (org.y + currentMate.y) / 2 + (Math.random() - 0.5) * org.radius;
-                                        const offspringInSalt = !!isPointInSaltRegion(offspringX, offspringY);
-                                        
-                                        if ((organisms.length + newOrganisms.length) < maxOrganismsLimit) { // Check organism limit
-                                            newOrganisms.push(sexualReproduceOrganism(org, currentMate, offspringX, offspringY, offspringInSalt));
-                                        }
-                                        // Reset mating state for both parents
-                                        org.matingContactTimer = 0; currentMate.matingContactTimer = 0;
-                                        org.matingPartnerId = null; currentMate.matingPartnerId = null;
-                                        org.matingCooldownTimer = MATING_COOLDOWN_SECONDS; currentMate.matingCooldownTimer = MATING_COOLDOWN_SECONDS;
-                                        org.targetMateId = null; currentMate.targetMateId = null; 
-                                        org.commitmentTimer = 0; currentMate.commitmentTimer = 0; 
-                                    }
-                                } else { // Mate is busy with someone else
-                                    org.matingContactTimer = 0; org.targetMateId = null; 
+                                if (org.matingContactTimer >= MATING_CONTACT_DURATION_SECONDS) {
+                                    const offspringBaseX = (org.x + currentMate.x) / 2;
+                                    const offspringBaseY = (org.y + currentMate.y) / 2;
+                                    const offspringInSalt = !!isPointInSaltRegion(offspringBaseX, offspringBaseY);
+                                    
+                                    const createdOffspring = sexualReproduceOrganism(org, currentMate, offspringBaseX, offspringBaseY, offspringInSalt);
+                                    newOrganisms.push(...createdOffspring);
+                                    
+                                    org.matingContactTimer = 0; currentMate.matingContactTimer = 0;
+                                    org.matingPartnerId = null; currentMate.matingPartnerId = null;
+                                    org.matingCooldownTimer = MATING_COOLDOWN_SECONDS; currentMate.matingCooldownTimer = MATING_COOLDOWN_SECONDS;
+                                    org.targetMateId = null; currentMate.targetMateId = null; 
+                                    org.commitmentTimer = 0; currentMate.commitmentTimer = 0; 
                                 }
-                             } else { // Not in contact anymore
-                                org.matingContactTimer = 0;
-                                if (org.matingPartnerId && org.matingPartnerId === currentMate.id) { // If they were partnered, break partnership
-                                     const stillPartneredMate = organisms.find(o => o.id === org.matingPartnerId);
-                                     if(stillPartneredMate) { 
-                                        stillPartneredMate.matingPartnerId = null; 
-                                        stillPartneredMate.matingContactTimer = 0; 
-                                     }
-                                     org.matingPartnerId = null;
-                                }
-                             }
-                        } else { // No current mate target, or target became invalid
-                            org.matingContactTimer = 0;
-                            if(org.matingPartnerId){ // If was partnered, break it
-                                const exPartner = organisms.find(o => o.id === org.matingPartnerId);
-                                if(exPartner) { exPartner.matingPartnerId = null; exPartner.matingContactTimer = 0;}
-                                org.matingPartnerId = null;
+                            } else { 
+                                org.matingContactTimer = 0; org.targetMateId = null; 
                             }
-                        }
-                    } else if (org.matingPartnerId) { // If currently partnered, check partner status
-                        const partner = organisms.find(o => o.id === org.matingPartnerId && !deadOrConsumedOrganismIds.has(o.id));
-                        if (!partner) { // Partner died or disappeared
-                            org.matingPartnerId = null; org.matingContactTimer = 0;
-                        } else { // Partner still exists, check distance
-                             const dx = partner.x - org.x; const dy = partner.y - org.y;
-                             const distSq = dx*dx + dy*dy;
-                             if (distSq >= (org.radius + partner.radius + 5)**2) { // If too far, break partnership
-                                org.matingContactTimer = 0; partner.matingContactTimer = 0;
-                                org.matingPartnerId = null; partner.matingPartnerId = null;
-                             }
+                         } else { 
+                            org.matingContactTimer = 0;
+                            if (org.matingPartnerId && org.matingPartnerId === currentMate.id) {
+                                 const stillPartneredMate = organisms.find(o => o.id === org.matingPartnerId);
+                                 if(stillPartneredMate) { 
+                                    stillPartneredMate.matingPartnerId = null; 
+                                    stillPartneredMate.matingContactTimer = 0; 
+                                 }
+                                 org.matingPartnerId = null;
+                            }
+                         }
+                    } else { 
+                        org.matingContactTimer = 0;
+                        if(org.matingPartnerId){
+                            const exPartner = organisms.find(o => o.id === org.matingPartnerId);
+                            if(exPartner) { exPartner.matingPartnerId = null; exPartner.matingContactTimer = 0;}
+                            org.matingPartnerId = null;
                         }
                     }
-                } else { // Asexual Reproduction
-                    if (Math.random() < org.actualDuplicationChance * deltaTime) { // actualDuplicationChance is already adjusted by cellCount in interpretGenes
+                } else if (org.matingPartnerId) {
+                    const partner = organisms.find(o => o.id === org.matingPartnerId && !deadOrConsumedOrganismIds.has(o.id));
+                    if (!partner) {
+                        org.matingPartnerId = null; org.matingContactTimer = 0;
+                    } else {
+                         const dx = partner.x - org.x; const dy = partner.y - org.y;
+                         const distSq = dx*dx + dy*dy;
+                         if (distSq >= (org.radius + partner.radius + 5)**2) {
+                            org.matingContactTimer = 0; partner.matingContactTimer = 0;
+                            org.matingPartnerId = null; partner.matingPartnerId = null;
+                         }
+                    }
+                }
+
+                // Asexual Reproduction (attempt if not a pure sexual breeder OR if heterogamous)
+                const canAsexuallyReproduce = !org.isBreeder || org.isHeterogamous;
+                if (canAsexuallyReproduce) {
+                    if (Math.random() < org.actualDuplicationChance * deltaTime) {
                         const angle=Math.random()*Math.PI*2; const offset=org.radius*2.5;
                         let offspringX = org.x + Math.cos(angle)*offset; let offspringY = org.y + Math.sin(angle)*offset;
-                        // If plasmodium is active and has a target husk, spawn offspring there
                         if (org.isPlasmodiumActive && org.plasmodiumTargetHuskId) { 
                             const targetHusk = husks.find(h => h.id === org.plasmodiumTargetHuskId && !consumedHuskIds.has(h.id));
                             if (targetHusk) { offspringX = targetHusk.x; offspringY = targetHusk.y; }
                         }
                         let potentialNewX = offspringX; let potentialNewY = offspringY;
-                        // Clamp offspring position to world boundaries
                         potentialNewX=Math.max(org.radius,Math.min(worldWidth-org.radius,potentialNewX));
                         potentialNewY=Math.max(org.radius,Math.min(worldHeight-org.radius,potentialNewY));
-                        // Check for overcrowding at spawn location
                         let nearbyCellCount=0; const crowdingCheckRadiusSq=CROWDING_CHECK_RADIUS*CROWDING_CHECK_RADIUS;
                         for(const other of organisms){if(org.id===other.id)continue;const dx=other.x-potentialNewX;const dy=other.y-potentialNewY;if((dx*dx+dy*dy)<crowdingCheckRadiusSq)nearbyCellCount+=other.cellCount;}
                         for(const newOrgCand of newOrganisms){const dx=newOrgCand.x-potentialNewX;const dy=newOrgCand.y-potentialNewY;if((dx*dx+dy*dy)<crowdingCheckRadiusSq)nearbyCellCount+=newOrgCand.cellCount;}
                         
-                        if(nearbyCellCount<=MAX_NEARBY_CELLS_FOR_DUPLICATION && (organisms.length + newOrganisms.length) < maxOrganismsLimit){ // Check crowding and organism limit
-                            newOrganisms.push(asexualReproduceOrganism(org,potentialNewX,potentialNewY,!!currentSaltRegion));
+                        if(nearbyCellCount<=MAX_NEARBY_CELLS_FOR_DUPLICATION){
+                            const offspring = asexualReproduceOrganism(org,potentialNewX,potentialNewY,!!currentSaltRegion);
+                            if (offspring) newOrganisms.push(offspring); // Add if successfully created
                         }
                     }
                 }
                 
-                // --- Behavior Decision Making (AI) ---
                 const isStarving = org.timeToLive < STARVATION_THRESHOLD_LIFESPAN && (org.genes[GENE_STARVATION] || 0) > STARVATION_GENE_ACTIVATION_THRESHOLD;
                 let wantsToLeaveSalt = false; let saltAvoidanceForceX = 0; let saltAvoidanceForceY = 0;
-                // Avoid salt if gene is active, not starving, and not highly salt tolerant
                 if (!isStarving && org.avoidsSalt && currentSaltRegion && (org.saltToleranceFactor < 0.8)) {
                     wantsToLeaveSalt = true;
                     const saltCenterX = currentSaltRegion.x + currentSaltRegion.width / 2;
                     const saltCenterY = currentSaltRegion.y + currentSaltRegion.height / 2;
-                    saltAvoidanceForceX = (org.x - saltCenterX) * 0.1; // Force away from salt center
+                    saltAvoidanceForceX = (org.x - saltCenterX) * 0.1;
                     saltAvoidanceForceY = (org.y - saltCenterY) * 0.1;
                 }
 
-                // Reset behavioral flags and targets for this tick
                 org.flees = false; org.hunts = false; org.isScavenging = false; org.isDwelling = false; org.seeksMate = false; 
                 org.targetOrganismId = null; org.targetHuskId = null; org.targetWallPoint = null;
                 org.targetHerdCenter = null; org.targetDwellingPoint = null; 
                 org.targetPoint = null;
 
-                interpretGenes(org); // Re-interpret genes in case some properties changed (e.g. after eating or if cellCount changed duplication rate)
+                interpretGenes(org);
 
-                // --- Decide on a new motive if not currently committed ---
                 if (org.commitmentTimer <= 0) { 
                     org.committedMotive = null; org.committedTargetId = null; org.committedTargetPos = null; org.targetMateId = null; 
 
                     let bestPrey = null; let strongestThreat = null; let potentialScavengerThreat = null;
                     let bestHuskTarget = null; let herdMembers = []; let bestMateTarget = null;
 
-                    if (org.sightRange > 0) { // Only if organism can see
+                    if (org.sightRange > 0) {
                         organisms.forEach(other => {
                             if (org === other || deadOrConsumedOrganismIds.has(other.id) || other.isEgg) return;
                             const dx_other = other.x - org.x; const dy_other = other.y - org.y;
                             const distance_other = Math.sqrt(dx_other * dx_other + dy_other * dy_other) - other.radius - org.radius;
 
-                            if (distance_other < org.sightRange) { // If other organism is in sight range
-                                // Check if this organism can win an engagement
+                            if (distance_other < org.sightRange) {
                                 const canWinEngagement = (org.strength > other.strength) || (org.strength === other.strength && org.radius > other.radius);
-                                // Check if the other organism is edible (multicellular organisms might not eat very small single-cell ones)
                                 const isEdibleByMulticell = !(org.cellCount > 1 && other.cellCount === 1 && other.radius < MIN_RADIUS_TO_EAT_BY_MULTICELLULAR);
 
-                                // Predator logic: find best prey
-                                if ((org.genes[GENE_PREDATOR_DRIVE] || 0) > PREDATOR_DRIVE_THRESHOLD && org.isHostile && canWinEngagement && isEdibleByMulticell && JSON.stringify(org.genes) !== JSON.stringify(other.genes) /* Avoid cannibalism of exact clones */) {
+                                if ((org.genes[GENE_PREDATOR_DRIVE] || 0) > PREDATOR_DRIVE_THRESHOLD && org.isHostile && canWinEngagement && isEdibleByMulticell && JSON.stringify(org.genes) !== JSON.stringify(other.genes)) {
                                     if (bestPrey === null || distance_other < (Math.sqrt((bestPrey.x - org.x)**2 + (bestPrey.y - org.y)**2) - bestPrey.radius - org.radius)) {
                                         bestPrey = other;
                                     }
                                 }
-                                // Fear logic: find strongest threat
                                 const isThreat = other.isHostile && (other.strength > org.strength * 1.5 || (org.isHostile && other.strength > org.strength && !canWinEngagement));
                                 if (((org.genes[GENE_FEAR_FACTOR] || 0) > FEAR_FACTOR_THRESHOLD || (org.isHostile && isThreat)) && isThreat) {
                                     if (strongestThreat === null || distance_other < (Math.sqrt((strongestThreat.x - org.x)**2 + (strongestThreat.y - org.y)**2) - strongestThreat.radius - org.radius)) {
                                         strongestThreat = other;
                                     }
                                 }
-                                // Scavenger threat assessment (fear of predators while scavenging)
                                 if (org.isScavenger && (org.genes[GENE_FEAR_FACTOR] || 0) > (org.genes[GENE_SCAVENGER] || 0) * 0.5 && other.isHostile) {
                                     if (potentialScavengerThreat === null || distance_other < (Math.sqrt((potentialScavengerThreat.x - org.x)**2 + (potentialScavengerThreat.y - org.y)**2) - potentialScavengerThreat.radius - org.radius)) {
                                         potentialScavengerThreat = other;
                                     }
                                 }
-                                // Herd mentality: find nearby herd members
                                 if (org.seeksHerd && other.seeksHerd && distance_other < org.sightRange * HERD_DETECTION_RADIUS_MULTIPLIER) {
                                     const isDirectThreatOrPrey = (strongestThreat && strongestThreat.id === other.id) || (bestPrey && bestPrey.id === other.id);
-                                    if (!isDirectThreatOrPrey) { herdMembers.push(other); } // Don't herd with direct threats/prey
+                                    if (!isDirectThreatOrPrey) { herdMembers.push(other); }
                                 }
                             }
                         });
-                        // Scavenger logic: find best husk target
                         if (org.isScavenger && org.eatCooldown <= 0) { 
                             husks.forEach(husk_target => {
                                 if (consumedHuskIds.has(husk_target.id)) return;
@@ -997,26 +1010,25 @@
                             });
                         }
 
-                        // Mating ritual logic: find best mate target
                         if (org.canPerformMatingRitual && org.matingCooldownTimer <= 0 && org.eatCooldown <= 0 && !org.matingPartnerId) {
                             let closestMateDistSq = Infinity;
+                            const adjustedMinMatchingGenes = Math.max(1, MAX_GENES - 5); // More dynamic matching genes
                             organisms.forEach(other => {
                                 if (org === other || deadOrConsumedOrganismIds.has(other.id) || other.isEgg || 
-                                    !other.canPerformMatingRitual || other.matingCooldownTimer > 0 || other.matingPartnerId) return; // Check eligibility of potential mate
+                                    !other.canPerformMatingRitual || other.matingCooldownTimer > 0 || other.matingPartnerId) return;
 
                                 const dx = other.x - org.x; const dy = other.y - org.y;
                                 const distSq = dx*dx + dy*dy;
-                                if (distSq < org.sightRange * org.sightRange) { // If in sight
+                                if (distSq < org.sightRange * org.sightRange) {
                                     let matchingGenes = 0;
-                                    // Check for genetic similarity (excluding hue)
                                     for (let i = 0; i < MAX_GENES; i++) {
                                         if (i === GENE_HUE) continue; 
                                         if (Math.abs((org.genes[i] || 0) - (other.genes[i] || 0)) < GENE_MATCHING_TOLERANCE) {
                                             matchingGenes++;
                                         }
                                     }
-                                    if (matchingGenes >= MIN_MATCHING_GENES_FOR_RITUAL) { // If genetically similar enough
-                                        if (distSq < closestMateDistSq) { // If closer than previous best mate
+                                    if (matchingGenes >= adjustedMinMatchingGenes) {
+                                        if (distSq < closestMateDistSq) {
                                             closestMateDistSq = distSq;
                                             bestMateTarget = other;
                                         }
@@ -1026,8 +1038,7 @@
                         }
                     } 
                     
-                    // --- Prioritize Motives ---
-                    if (isStarving && (bestHuskTarget || (bestPrey && org.isHostile))) { // Starvation: prioritize food
+                    if (isStarving && (bestHuskTarget || (bestPrey && org.isHostile))) {
                         if (bestHuskTarget) {
                             org.isScavenging = true; org.targetHuskId = bestHuskTarget.id; org.targetPoint = { x: bestHuskTarget.x, y: bestHuskTarget.y };
                             org.committedMotive = 'scavenge_husk'; org.committedTargetId = bestHuskTarget.id; org.commitmentTimer = MOTIVE_COMMITMENT_DURATION_SECONDS;
@@ -1036,44 +1047,43 @@
                             org.committedMotive = 'hunt_organism'; org.committedTargetId = bestPrey.id; org.commitmentTimer = MOTIVE_COMMITMENT_DURATION_SECONDS;
                         }
                     }
-                    else if (strongestThreat) { // Flee from strongest threat
-                        org.flees = true; org.targetOrganismId = strongestThreat.id; org.targetPoint = { x: org.x + (org.x - strongestThreat.x), y: org.y + (org.y - strongestThreat.y) }; // Flee directly away
+                    else if (strongestThreat) {
+                        org.flees = true; org.targetOrganismId = strongestThreat.id; org.targetPoint = { x: org.x + (org.x - strongestThreat.x), y: org.y + (org.y - strongestThreat.y) };
                         org.committedMotive = 'flee'; org.committedTargetId = strongestThreat.id; org.commitmentTimer = MOTIVE_COMMITMENT_DURATION_SECONDS;
                     }
-                    else if (bestMateTarget) { // Seek mate if one is found
+                    else if (bestMateTarget) {
                         org.seeksMate = true; org.targetMateId = bestMateTarget.id; org.targetPoint = { x: bestMateTarget.x, y: bestMateTarget.y };
                         org.committedMotive = 'seek_mate'; org.committedTargetId = bestMateTarget.id; org.commitmentTimer = MOTIVE_COMMITMENT_DURATION_SECONDS;
                     }
-                    else if (org.isScavenger && potentialScavengerThreat && bestHuskTarget) { // Scavenge or flee if threatened while scavenging
-                        if ((org.genes[GENE_FEAR_FACTOR] || 0) > (org.genes[GENE_SCAVENGER] || 0)) { // If fear is stronger than scavenger drive
+                    else if (org.isScavenger && potentialScavengerThreat && bestHuskTarget) {
+                        if ((org.genes[GENE_FEAR_FACTOR] || 0) > (org.genes[GENE_SCAVENGER] || 0)) {
                             org.flees = true; org.targetOrganismId = potentialScavengerThreat.id; org.targetPoint = { x: org.x + (org.x - potentialScavengerThreat.x), y: org.y + (org.y - potentialScavengerThreat.y) };
                             org.committedMotive = 'flee'; org.committedTargetId = potentialScavengerThreat.id; org.commitmentTimer = MOTIVE_COMMITMENT_DURATION_SECONDS;
-                        } else { // Otherwise, continue scavenging
+                        } else {
                             org.isScavenging = true; org.targetHuskId = bestHuskTarget.id; org.targetPoint = { x: bestHuskTarget.x, y: bestHuskTarget.y };
                             org.committedMotive = 'scavenge_husk'; org.committedTargetId = bestHuskTarget.id; org.commitmentTimer = MOTIVE_COMMITMENT_DURATION_SECONDS;
                         }
                     }
-                    else if (bestPrey && org.isHostile) { // Hunt prey
+                    else if (bestPrey && org.isHostile) {
                         org.hunts = true; org.targetOrganismId = bestPrey.id; org.targetPoint = { x: bestPrey.x, y: bestPrey.y };
                         org.committedMotive = 'hunt_organism'; org.committedTargetId = bestPrey.id; org.commitmentTimer = MOTIVE_COMMITMENT_DURATION_SECONDS;
                     }
-                    else if (bestHuskTarget && org.isScavenger) { // Scavenge husks
+                    else if (bestHuskTarget && org.isScavenger) {
                         org.isScavenging = true; org.targetHuskId = bestHuskTarget.id; org.targetPoint = { x: bestHuskTarget.x, y: bestHuskTarget.y };
                         org.committedMotive = 'scavenge_husk'; org.committedTargetId = bestHuskTarget.id; org.commitmentTimer = MOTIVE_COMMITMENT_DURATION_SECONDS;
                     }
-                    else if (org.canDwelling && org.timeToLive > org.initialTimeToLive * DWELLING_LIFESPAN_SATISFACTION_RATIO) { // Dwelling behavior (return to birth location if well-fed)
+                    else if (org.canDwelling && org.timeToLive > org.initialTimeToLive * DWELLING_LIFESPAN_SATISFACTION_RATIO) {
                         const distToBirthSq = (org.x - org.birthX)**2 + (org.y - org.birthY)**2;
-                        if (distToBirthSq > (DWELLING_REACH_THRESHOLD * 2)**2) { // Only if far from birth location
+                        if (distToBirthSq > (DWELLING_REACH_THRESHOLD * 2)**2) {
                              org.isDwelling = true; org.targetDwellingPoint = { x: org.birthX, y: org.birthY }; org.targetPoint = { x: org.birthX, y: org.birthY };
                              org.committedMotive = 'dwell'; org.committedTargetPos = { x: org.birthX, y: org.birthY }; org.commitmentTimer = MOTIVE_COMMITMENT_DURATION_SECONDS;
                         }
                     }
-                    else if (org.isAttractedToWalls && walls.length > 0) { // Wall attraction
+                    else if (org.isAttractedToWalls && walls.length > 0) {
                         org.targetWallPoint = findClosestWallPoint(org);
                         if (org.targetWallPoint) { org.targetPoint = org.targetWallPoint; }
-                        // No commitment for wall attraction, it's a continuous pull
                     }
-                    else if (org.seeksHerd && herdMembers.length > 0) { // Herd behavior
+                    else if (org.seeksHerd && herdMembers.length > 0) {
                         let herdCenterX = 0; let herdCenterY = 0;
                         herdMembers.forEach(member => { herdCenterX += member.x; herdCenterY += member.y; });
                         herdCenterX /= herdMembers.length; herdCenterY /= herdMembers.length;
@@ -1081,55 +1091,53 @@
                         org.committedMotive = 'herd'; org.committedTargetPos = { x: herdCenterX, y: herdCenterY }; org.commitmentTimer = MOTIVE_COMMITMENT_DURATION_SECONDS;
                     }
 
-                } else { // --- If currently committed to a motive, update target based on commitment ---
+                } else { 
                     if (org.committedMotive === 'flee' || org.committedMotive === 'hunt_organism') { 
                         const target = organisms.find(o => o.id === org.committedTargetId && !deadOrConsumedOrganismIds.has(o.id));
                         if (target) {
                             org.targetOrganismId = target.id;
                             if (org.committedMotive === 'flee') {
                                 org.flees = true;
-                                org.targetPoint = { x: org.x + (org.x - target.x), y: org.y + (org.y - target.y) }; // Continue fleeing from target's current pos
-                            } else { // hunt_organism
+                                org.targetPoint = { x: org.x + (org.x - target.x), y: org.y + (org.y - target.y) };
+                            } else {
                                 org.hunts = true;
-                                org.targetPoint = { x: target.x, y: target.y }; // Continue hunting target's current pos
+                                org.targetPoint = { x: target.x, y: target.y };
                             }
-                        } else { org.commitmentTimer = 0; } // Target lost, break commitment
+                        } else { org.commitmentTimer = 0; }
                     }
                     else if (org.committedMotive === 'scavenge_husk') { 
                         const target = husks.find(h => h.id === org.committedTargetId && !consumedHuskIds.has(h.id));
                         if (target) {
                             org.isScavenging = true; org.targetHuskId = target.id; org.targetPoint = { x: target.x, y: target.y };
-                        } else { org.commitmentTimer = 0; } // Husk eaten or disappeared
+                        } else { org.commitmentTimer = 0; }
                     }
                     else if (org.committedMotive === 'dwell' && org.committedTargetPos) { 
                         org.isDwelling = true; org.targetDwellingPoint = org.committedTargetPos; org.targetPoint = org.committedTargetPos;
                         const distToDwellingSq = (org.x - org.committedTargetPos.x)**2 + (org.y - org.committedTargetPos.y)**2;
-                        if (distToDwellingSq < (DWELLING_REACH_THRESHOLD)**2) org.commitmentTimer = 0; // Reached dwelling, break commitment
+                        if (distToDwellingSq < (DWELLING_REACH_THRESHOLD)**2) org.commitmentTimer = 0;
                     }
                     else if (org.committedMotive === 'herd' && org.committedTargetPos) { 
                         org.targetHerdCenter = org.committedTargetPos; org.targetPoint = org.committedTargetPos;
-                        // Herd commitment might time out naturally, or if herd disperses (handled by re-evaluating next tick)
                     }
                     else if (org.committedMotive === 'seek_mate') {
                         const target = organisms.find(o => o.id === org.committedTargetId && !deadOrConsumedOrganismIds.has(o.id) && o.canPerformMatingRitual && o.matingCooldownTimer <= 0 && !o.matingPartnerId);
                         if (target) {
                             org.seeksMate = true; org.targetMateId = target.id; org.targetPoint = { x: target.x, y: target.y };
-                        } else { org.commitmentTimer = 0; org.targetMateId = null; } // Mate lost or became unavailable
+                        } else { org.commitmentTimer = 0; org.targetMateId = null; }
                     }
                 }
                 
-                // --- Movement Calculation ---
                 let targetVx = 0; let targetVy = 0;
-                if (org.targetPoint) { // If has a specific target point
+                if (org.targetPoint) {
                     const dx = org.targetPoint.x - org.x; const dy = org.targetPoint.y - org.y;
                     const distToTarget = Math.sqrt(dx * dx + dy * dy);
                     if (distToTarget > 0) { targetVx = (dx / distToTarget) * org.speed; targetVy = (dy / distToTarget) * org.speed; }
                 }
-                else if (!wantsToLeaveSalt && org.speed > 0) { // Random movement if no target and not avoiding salt
-                    if (Math.random() < 0.05) { // Chance to change random direction
+                else if (!wantsToLeaveSalt && org.speed > 0) {
+                    if (Math.random() < 0.05) {
                         const angle = Math.random() * Math.PI * 2;
                         let moveFactor = BASE_RANDOM_MOVEMENT_FACTOR; 
-                        if (org.isCurious) { // Curiosity increases random movement range
+                        if (org.isCurious) {
                             moveFactor *= CURIOSITY_MOVEMENT_MULTIPLIER;
                         }
                         targetVx = Math.cos(angle) * org.speed * moveFactor;
@@ -1137,9 +1145,7 @@
                     }
                 }
 
-                // Add salt avoidance force
                 targetVx += saltAvoidanceForceX; targetVy += saltAvoidanceForceY;
-                // Add mating attraction force
                 if (org.seeksMate && org.targetPoint) { 
                      const dx = org.targetPoint.x - org.x; const dy = org.targetPoint.y - org.y;
                      const distToTarget = Math.sqrt(dx*dx + dy*dy);
@@ -1149,30 +1155,29 @@
                      }
                 }
 
-                // Pathfinding / Wall Avoidance
                 if (org.canPathfind) { 
                     const wallDetectionRadius = org.radius * WALL_DETECTION_RANGE_MULTIPLIER;
                     let wallInfluenceX = 0; let wallInfluenceY = 0;
                     walls.forEach(wall => {
                         const closestPoint = getClosestPointOnLineSegment(org.x, org.y, wall.x1, wall.y1, wall.x2, wall.y2);
                         const dx_wall = org.x - closestPoint.x; const dy_wall = org.y - closestPoint.y; const distance_wall = Math.sqrt(dx_wall * dx_wall + dy_wall * dy_wall);
-                        if (distance_wall < wallDetectionRadius + wall.thickness / 2) { // If wall is close
+                        if (distance_wall < wallDetectionRadius + wall.thickness / 2) {
                             const normX = dx_wall / distance_wall; const normY = dy_wall / distance_wall;
-                            if (org.flees || wantsToLeaveSalt) { // If fleeing or avoiding salt, push directly away from wall
+                            if (org.flees || wantsToLeaveSalt) {
                                 wallInfluenceX += normX * WALL_AVOIDANCE_FORCE; wallInfluenceY += normY * WALL_AVOIDANCE_FORCE;
-                            } else if (org.hunts || org.isScavenging) { // If hunting/scavenging, try to steer around wall
+                            } else if (org.hunts || org.isScavenging) {
                                 let targetPathX, targetPathY;
                                 if (org.targetOrganismId) { const target = organisms.find(o => o.id === org.targetOrganismId && !deadOrConsumedOrganismIds.has(o.id)); if (target) { targetPathX = target.x; targetPathY = target.y; }}
                                 else if (org.targetHuskId) { const target = husks.find(h => h.id === org.targetHuskId && !consumedHuskIds.has(h.id)); if (target) { targetPathX = target.x; targetPathY = target.y; }}
                                 if (targetPathX !== undefined && targetPathY !== undefined) {
                                     const orgToTargetX = targetPathX - org.x; const orgToTargetY = targetPathY - org.y;
                                     const orgToWallX = closestPoint.x - org.x; const orgToWallY = closestPoint.y - org.y;
-                                    const dotProduct = orgToTargetX * orgToWallX + orgToTargetY * orgToWallY; // Check if wall is between org and target
+                                    const dotProduct = orgToTargetX * orgToWallX + orgToTargetY * orgToWallY;
                                     if (dotProduct > 0) { 
                                         const wallDirX = wall.x2 - wall.x1; const wallDirY = wall.y2 - wall.y1; const wallLength = Math.sqrt(wallDirX * wallDirX + wallDirY * wallDirY);
                                         if (wallLength > 0) {
-                                            const perpX = -wallDirY / wallLength; const perpY = wallDirX / wallLength; // Perpendicular to wall
-                                            const crossProduct = (targetPathX - closestPoint.x) * wallDirY - (targetPathY - closestPoint.y) * wallDirX; // Determine which side of wall target is on
+                                            const perpX = -wallDirY / wallLength; const perpY = wallDirX / wallLength;
+                                            const crossProduct = (targetPathX - closestPoint.x) * wallDirY - (targetPathY - closestPoint.y) * wallDirX;
                                             if (crossProduct > 0) { wallInfluenceX += perpX * WALL_STEERING_FORCE; wallInfluenceY += perpY * WALL_STEERING_FORCE; } 
                                             else { wallInfluenceX -= perpX * WALL_STEERING_FORCE; wallInfluenceY -= perpY * WALL_STEERING_FORCE; }
                                         }
@@ -1184,62 +1189,59 @@
                     targetVx += wallInfluenceX; targetVy += wallInfluenceY;
                 }
                 
-                // Apply inertia and drag to velocity
                 const inertiaFactor=org.speed>0?0.05:1;org.vx+=(targetVx-org.vx)*inertiaFactor;org.vy+=(targetVy-org.vy)*inertiaFactor;
                 org.vx *= DRAG_FACTOR; org.vy *= DRAG_FACTOR; 
 
-                if(org.speed===0&&!wantsToLeaveSalt){org.vx*=0.9;org.vy*=0.9;} // Stronger drag if no inherent speed
-                else{const currentSpeedVal=Math.sqrt(org.vx**2+org.vy**2);if(currentSpeedVal>org.speed*1.5&&org.speed>0){org.vx=(org.vx/currentSpeedVal)*org.speed*1.5;org.vy=(org.vy/currentSpeedVal)*org.speed*1.5;}} // Cap speed
+                if(org.speed===0&&!wantsToLeaveSalt){org.vx*=0.9;org.vy*=0.9;}
+                else{const currentSpeedVal=Math.sqrt(org.vx**2+org.vy**2);if(currentSpeedVal>org.speed*1.5&&org.speed>0){org.vx=(org.vx/currentSpeedVal)*org.speed*1.5;org.vy=(org.vy/currentSpeedVal)*org.speed*1.5;}}
                 
-                // Update position based on velocity
                 org.x+=org.vx*deltaTime;org.y+=org.vy*deltaTime;
                 
-                // --- Collision Handling ---
-                // Wall collisions
                 walls.forEach(wall=>{const closestPoint=getClosestPointOnLineSegment(org.x,org.y,wall.x1,wall.y1,wall.x2,wall.y2);const dx=org.x-closestPoint.x;const dy=org.y-closestPoint.y;const distSq=dx*dx+dy*dy;const totalRadius=org.radius+wall.thickness/2;if(distSq<totalRadius*totalRadius&&distSq>0){const dist=Math.sqrt(distSq);const overlap=totalRadius-dist;const pushX=(dx/dist)*overlap;const pushY=(dy/dist)*overlap;org.x+=pushX;org.y+=pushY;const dotProduct=org.vx*(closestPoint.x-org.x)+org.vy*(closestPoint.y-org.y);if(dotProduct<0){org.vx*=-0.3;org.vy*=-0.3;}}else if (distSq === 0) { org.x+=(Math.random()-0.5)*0.1;org.y+=(Math.random()-0.5)*0.1;}});
-                // World boundary collisions
                 const bounceFactor=-0.5;if(org.x-org.radius<0){org.x=org.radius;org.vx*=bounceFactor;}else if(org.x+org.radius>worldWidth){org.x=worldWidth-org.radius;org.vx*=bounceFactor;} if(org.y-org.radius<0){org.y=org.radius;org.vy*=bounceFactor;}else if(org.y+org.radius>worldHeight){org.y=worldHeight-org.radius;org.vy*=bounceFactor;}
-                // Organism-organism collisions (push apart, no damage here)
                 organisms.forEach(other=>{if(org===other||deadOrConsumedOrganismIds.has(other.id)||other.isEgg)return;const dx=other.x-org.x;const dy=other.y-org.y;const distanceSq=dx*dx+dy*dy;const sumRadii=org.radius+other.radius;if(distanceSq<sumRadii*sumRadii&&distanceSq>0){const isEatingScenario=org.isHostile&&((org.strength>other.strength)||(org.strength===other.strength&&org.radius>other.radius));if(!isEatingScenario){const distance=Math.sqrt(distanceSq);const overlap=sumRadii-distance;const pushX=(dx/distance)*overlap*0.5;const pushY=(dy/distance)*overlap*0.5;org.x-=pushX;org.y-=pushY;other.x+=pushX;other.y+=pushY;const tempVx=org.vx;const tempVy=org.vy;org.vx=other.vx*0.5;org.vy=other.vy*0.5;other.vx=tempVx*0.5;other.vy=tempVy*0.5;}}});
                 
-                // --- Eating Logic ---
-                if(org.isHostile&&org.eatCooldown<=0){ // Hostile organisms eat other organisms
+                if(org.isHostile&&org.eatCooldown<=0){
                     organisms.forEach(other=>{
-                        if(org===other||deadOrConsumedOrganismIds.has(other.id)||deadOrConsumedOrganismIds.has(org.id))return; // Can't eat self or already dead
+                        if(org===other||deadOrConsumedOrganismIds.has(other.id)||deadOrConsumedOrganismIds.has(org.id))return;
                         const dx=other.x-org.x;const dy=other.y-org.y;const distance=Math.sqrt(dx*dx+dy*dy);
-                        if(distance<org.radius+other.radius){ // If in contact
-                            let orgWins=false; // Determine if this organism wins the engagement
-                            if (other.isEgg) { orgWins = true; } // Always wins against eggs
+                        if(distance<org.radius+other.radius){
+                            let orgWins=false;
+                            if (other.isEgg) { orgWins = true; }
                             else { 
                                 const isEdibleByMulticell=!(org.cellCount>1&&other.cellCount===1&&other.radius<MIN_RADIUS_TO_EAT_BY_MULTICELLULAR); 
-                                if(JSON.stringify(org.genes)!==JSON.stringify(other.genes)&&isEdibleByMulticell){ // Avoid cannibalism of exact clones, check edibility
+                                if(JSON.stringify(org.genes)!==JSON.stringify(other.genes)&&isEdibleByMulticell){
                                     if(org.strength>other.strength)orgWins=true; 
                                     else if(org.strength===other.strength&&org.radius>other.radius)orgWins=true; 
                                 } 
                             }
-                            if(orgWins){ // If this organism eats the other
-                                deadOrConsumedOrganismIds.add(other.id); // Mark other as consumed
-                                org.radius=Math.min(MAX_RADIUS_CAP,org.radius+other.radius*CONSUMPTION_SIZE_BOOST); // Increase radius
-                                if (!other.isEgg) { org.genes[GENE_BASE_SIZE]=Math.min(1,(org.genes[GENE_BASE_SIZE]||0)+(other.genes[GENE_BASE_SIZE]||0)*CONSUMPTION_SIZE_BOOST*0.1); } // Slightly increase base size gene
-                                let lifespanGain=LIFESPAN_EXTENSION_PER_CONSUMED_CELL_SECONDS*(other.isEgg ? 1 : other.cellCount); // Lifespan gain based on consumed cells
-                                if(currentSaltRegion){lifespanGain*=(1-(SALT_REGION_LIFESPAN_REDUCTION*(1-org.saltToleranceFactor)));} // Reduce gain in salt region
-                                if (org.isEggLayer) lifespanGain *= EGG_LIFESPAN_FOOD_BONUS; // Bonus if egg layer
-                                org.timeToLive+=lifespanGain; // Add to lifespan
-                                org.eatCooldown=EATING_COOLDOWN_SECONDS; // Set eating cooldown
-                                interpretGenes(org); // Re-interpret genes as properties might have changed
+                            if(orgWins){
+                                deadOrConsumedOrganismIds.add(other.id);
+                                if (other.id === spectatingOrganismId) { // Stop spectating if eaten
+                                    spectatingOrganismId = null;
+                                    organismInfoPanel.classList.add('hidden');
+                                }
+                                org.radius=Math.min(MAX_RADIUS_CAP,org.radius+other.radius*CONSUMPTION_SIZE_BOOST);
+                                if (!other.isEgg) { org.genes[GENE_BASE_SIZE]=Math.min(1,(org.genes[GENE_BASE_SIZE]||0)+(other.genes[GENE_BASE_SIZE]||0)*CONSUMPTION_SIZE_BOOST*0.1); }
+                                let lifespanGain=LIFESPAN_EXTENSION_PER_CONSUMED_CELL_SECONDS*(other.isEgg ? 1 : other.cellCount);
+                                if(currentSaltRegion){lifespanGain*=(1-(SALT_REGION_LIFESPAN_REDUCTION*(1-org.saltToleranceFactor)));}
+                                if (org.isEggLayer) lifespanGain *= EGG_LIFESPAN_FOOD_BONUS;
+                                org.timeToLive+=lifespanGain;
+                                org.eatCooldown=EATING_COOLDOWN_SECONDS;
+                                interpretGenes(org);
                             }
                         }
                     });
                 }
-                else if(org.eatCooldown<=0){ // Non-hostile (or hostile on cooldown) eat husks
+                else if(org.eatCooldown<=0){
                     husks.forEach(husk=>{
                         if(consumedHuskIds.has(husk.id))return;
                         const dx=husk.x-org.x;const dy=husk.y-org.y;const distance=Math.sqrt(dx*dx+dy*dy);
-                        const canEatHusk = !org.isScavenger || (org.isScavenger && husk.radius <= org.radius); // Scavengers can only eat smaller/equal husks
+                        const canEatHusk = !org.isScavenger || (org.isScavenger && husk.radius <= org.radius);
                         if(distance<org.radius+husk.radius && canEatHusk){
-                            consumedHuskIds.add(husk.id); // Mark husk as consumed
-                            let lifespanGain=LIFESPAN_EXTENSION_FROM_HUSK*(husk.cellCount||1); // Lifespan gain from husk
-                            if(husk.isDispensed)lifespanGain*=0.5; // Less gain from dispensed husks
+                            consumedHuskIds.add(husk.id);
+                            let lifespanGain=LIFESPAN_EXTENSION_FROM_HUSK*(husk.cellCount||1);
+                            if(husk.isDispensed)lifespanGain*=0.5;
                             if(currentSaltRegion){lifespanGain*=(1-(SALT_REGION_LIFESPAN_REDUCTION*(1-org.saltToleranceFactor)));} 
                             if (org.isEggLayer) lifespanGain *= EGG_LIFESPAN_FOOD_BONUS; 
                             org.timeToLive+=lifespanGain;
@@ -1249,15 +1251,13 @@
                 }
             });
             
-            // Filter out dead/consumed organisms and husks
             organisms=organisms.filter(org=>!deadOrConsumedOrganismIds.has(org.id));
             husks=husks.filter(husk=>!consumedHuskIds.has(husk.id));
-            organisms.push(...newOrganisms); // Add newly created organisms
-            lastTickTime=currentTime; // Update last tick time for next frame
-            updateStats(); // Update displayed statistics
+            organisms.push(...newOrganisms);
+            lastTickTime=currentTime;
+            updateStats();
         }
 
-        // Function to get cell offsets for drawing multi-cellular organisms
         function getCellOffsets(numCells, baseOffsetScale, rotation = 0) { 
             const offsets = []; const angleOffset = rotation; 
             if (numCells <= 0) return [{x:0, y:0}]; 
@@ -1265,7 +1265,7 @@
             else if (numCells === 2) { const d = baseOffsetScale * 0.7; offsets.push({ x: -d*Math.cos(angleOffset), y: -d*Math.sin(angleOffset) }); offsets.push({ x: d*Math.cos(angleOffset), y: d*Math.sin(angleOffset) }); } 
             else if (numCells === 3) { const r = baseOffsetScale * 0.9; for (let i=0; i<3; i++) offsets.push({ x: r*Math.cos(i*2*Math.PI/3 + angleOffset), y: r*Math.sin(i*2*Math.PI/3 + angleOffset) }); } 
             else if (numCells === 4) { const d = baseOffsetScale * 1.0; const ba=[Math.PI/4, 3*Math.PI/4, 5*Math.PI/4, 7*Math.PI/4]; for (let i=0; i<4; i++) offsets.push({ x: d*Math.cos(ba[i]+angleOffset), y: d*Math.sin(ba[i]+angleOffset) }); } 
-            else { // For more than 4 cells, central cell + outer ring
+            else {
                 offsets.push({ x: 0, y: 0 }); 
                 const noc = numCells - 1; 
                 if (noc > 0) { 
@@ -1279,35 +1279,28 @@
             return offsets; 
         }
         
-        // Main draw function
         function draw() { 
-            ctx.clearRect(0,0,canvas.width,canvas.height); // Clear canvas
-            ctx.save(); // Save context state
-            ctx.scale(viewScale,viewScale); // Apply zoom
-            ctx.translate(-viewOffsetX,-viewOffsetY); // Apply pan
+            ctx.clearRect(0,0,canvas.width,canvas.height);
+            ctx.save();
+            ctx.scale(viewScale,viewScale);
+            ctx.translate(-viewOffsetX,-viewOffsetY);
             
-            // Draw salt regions
             ctx.fillStyle=SALT_REGION_TINT_COLOR; 
             saltRegions.forEach(region=>{ctx.fillRect(region.x,region.y,region.width,region.height);}); 
             
-            // Draw walls
             ctx.strokeStyle='#555e70'; 
             ctx.lineWidth=WALL_THICKNESS; 
             walls.forEach(wall=>{ctx.beginPath();ctx.moveTo(wall.x1,wall.y1);ctx.lineTo(wall.x2,wall.y2);ctx.stroke();}); 
             
-            // Draw food dispensers
             ctx.fillStyle='#4a5568'; 
             foodDispensers.forEach(dispenser=>{ctx.beginPath();ctx.arc(dispenser.x,dispenser.y,dispenser.radius,0,Math.PI*2);ctx.fill();}); 
             
-            // Draw heatmaps if enabled
             if(showScavengerHeatmap){ctx.fillStyle=HEATMAP_SCAVENGER_COLOR;organisms.forEach(org=>{if(org.isScavenger && !org.isEgg){ctx.beginPath();ctx.arc(org.x,org.y,org.radius*HEATMAP_RADIUS_MULTIPLIER,0,Math.PI*2);ctx.fill();}}); } 
             if(showPreyHeatmap){ctx.fillStyle=HEATMAP_PREY_COLOR;organisms.forEach(org=>{if(org.flees && !org.isEgg){ctx.beginPath();ctx.arc(org.x,org.y,org.radius*HEATMAP_RADIUS_MULTIPLIER,0,Math.PI*2);ctx.fill();}}); } 
             if(showPredatorHeatmap){ctx.fillStyle=HEATMAP_PREDATOR_COLOR;organisms.forEach(org=>{if(org.isHostile && !org.isEgg){ctx.beginPath();ctx.arc(org.x,org.y,org.radius*HEATMAP_RADIUS_MULTIPLIER,0,Math.PI*2);ctx.fill();}}); } 
             
-            // Draw husks
             husks.forEach(husk=>{ctx.beginPath();ctx.arc(husk.x,husk.y,husk.radius,0,Math.PI*2);ctx.fillStyle=HUSK_COLOR;ctx.fill();}); 
             
-            // Draw mycelium connections
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)'; 
             ctx.lineWidth = 0.5;
             myceliumConnections.forEach(key => {
@@ -1317,53 +1310,54 @@
                 if (org1 && org2) { ctx.beginPath(); ctx.moveTo(org1.x, org1.y); ctx.lineTo(org2.x, org2.y); ctx.stroke(); }
             });
 
-            // Draw organisms
             organisms.forEach(org=>{ 
-                // Draw plasmodium effect if active
                 if (org.isPlasmodiumActive && org.plasmodiumEffectRadius > 0 && !org.isEgg) { 
                     ctx.fillStyle = `hsla(${Math.floor((org.genes[GENE_HUE] || 0) * 360)}, 70%, 60%, ${PLASMODIUM_TINT_ALPHA})`; 
                     ctx.beginPath(); ctx.arc(org.x, org.y, org.plasmodiumEffectRadius, 0, Math.PI * 2); ctx.fill(); 
                 } 
                 let fillStyle = org.color; 
                 if (org.isEgg) { fillStyle = EGG_COLOR; } 
-                else if (org.isHostile) { fillStyle = `hsl(${Math.floor((org.genes[GENE_HUE]||0)*360)}, 90%, 45%)`; } // Hostile organisms are more saturated red
+                else if (org.isHostile) { fillStyle = `hsl(${Math.floor((org.genes[GENE_HUE]||0)*360)}, 90%, 45%)`; }
                 ctx.fillStyle = fillStyle; 
-                // Draw organism cells
-                if(!org.cellCount||org.cellCount<=0||org.isEgg){ // Single cell or egg
+                if(!org.cellCount||org.cellCount<=0||org.isEgg){
                     ctx.beginPath();ctx.arc(org.x,org.y,org.radius,0,Math.PI*2);ctx.fill(); 
                 } 
-                else{ // Multi-cellular organism
+                else{
                     const numCells=org.cellCount; 
                     const individualCellRadius=Math.max(1.5,org.radius/(Math.sqrt(numCells)*0.8+0.2)); 
                     const cellLayoutScale=individualCellRadius*0.7; 
-                    const uniqueAngleOffset=(org.id.charCodeAt(0)%16/16)*Math.PI*2; // Consistent rotation for cell layout
+                    const uniqueAngleOffset=(org.id.charCodeAt(0)%16/16)*Math.PI*2;
                     const cellPositions=getCellOffsets(numCells,cellLayoutScale,uniqueAngleOffset); 
                     cellPositions.forEach(pos=>{ctx.beginPath();ctx.arc(org.x+pos.x,org.y+pos.y,individualCellRadius,0,Math.PI*2);ctx.fill();}); 
                 } 
-                // Draw flagella and eyes if not an egg
                 if(!org.isEgg) { 
                     if(org.flagellaCount>0){ctx.strokeStyle=org.color;ctx.lineWidth=Math.max(1,org.radius*0.1);const angleStep=(Math.PI*2)/org.flagellaCount;for(let i=0;i<org.flagellaCount;i++){const baseAngle=i*angleStep;const wave=Math.sin(simulationTime*10/gameSpeedMultiplier+baseAngle+org.id.charCodeAt(0)*0.1)*0.4;const angle=Math.atan2(org.vy,org.vx)+Math.PI+baseAngle+wave;const length=org.radius*1.2;ctx.beginPath();ctx.moveTo(org.x,org.y);ctx.lineTo(org.x+Math.cos(angle)*length,org.y+Math.sin(angle)*length);ctx.stroke();}} 
                     if(org.sightRange>0){ctx.fillStyle='rgba(255,255,255,0.8)';const eyeSize=Math.max(1.5,org.radius*0.25);const moveAngle=Math.atan2(org.vy,org.vx);ctx.beginPath();ctx.arc(org.x+Math.cos(moveAngle)*org.radius*0.5,org.y+Math.sin(moveAngle)*org.radius*0.5,eyeSize,0,Math.PI*2);ctx.fill();}} 
+                // Highlight spectated organism
+                if (org.id === spectatingOrganismId) {
+                    ctx.strokeStyle = 'rgba(59, 130, 246, 0.9)'; // Tailwind blue-500
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(org.x, org.y, org.radius + 4, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
             }); 
-            ctx.restore(); // Restore context state
+            ctx.restore();
         }
 
-        // Main game loop function
         function gameLoop(timestamp) { 
-            update(timestamp||performance.now()); // Update simulation state
-            draw(); // Draw the simulation
-            if(!isPaused){animationFrameId=requestAnimationFrame(gameLoop);} // Request next frame if not paused
+            update(timestamp||performance.now());
+            draw();
+            if(!isPaused){animationFrameId=requestAnimationFrame(gameLoop);}
         }
         
-        // Function to update the visual state of heatmap toggle buttons
         function updateHeatmapButtonStates() {
             toggleScavengerHeatmapButton.classList.toggle('heatmap-button-active', showScavengerHeatmap);
             togglePreyHeatmapButton.classList.toggle('heatmap-button-active', showPreyHeatmap);
             togglePredatorHeatmapButton.classList.toggle('heatmap-button-active', showPredatorHeatmap);
         }
         
-        // Function to pause the simulation (used by modals)
-        function pauseSimulation() {
+        function pauseCoreSimulation() { // Renamed to avoid conflict
             if (!isPaused) {
                 isPaused = true;
                 pauseButton.textContent = "Resume";
@@ -1371,151 +1365,179 @@
             }
         }
 
-        // Function to resume simulation if it was paused by a modal and the modal is now closed
-        function resumeSimulationIfModalClosed() {
-            if (isPaused && pauseButton.textContent === "Resume" && 
-                organismInfoModal.classList.contains('hidden') && 
-                howToPlayModal.classList.contains('hidden')) { // Only resume if both modals are hidden
+        function resumeCoreSimulation() { // Renamed
+             if (isPaused && pauseButton.textContent === "Resume" && howToPlayModal.classList.contains('hidden')) {
                 isPaused = false;
                 pauseButton.textContent = "Pause";
-                lastTickTime = performance.now(); // Reset last tick time to avoid large deltaTime jump
+                lastTickTime = performance.now();
                 if (animationFrameId) cancelAnimationFrame(animationFrameId);
                 animationFrameId = requestAnimationFrame(gameLoop);
             }
         }
 
         // --- Event Listeners ---
-        window.addEventListener('resize',resizeCanvas); // Resize canvas on window resize
-        resetButton.addEventListener('click',initSimulation); // Reset simulation on button click
-        pauseButton.addEventListener('click',()=>{ // Pause/resume simulation
-            isPaused=!isPaused;
-            pauseButton.textContent=isPaused?"Resume":"Pause";
-            if(!isPaused){ // If resuming
-                lastTickTime=performance.now();
-                if(animationFrameId)cancelAnimationFrame(animationFrameId);
-                animationFrameId=requestAnimationFrame(gameLoop);
-            }else{ // If pausing
-                if(animationFrameId)cancelAnimationFrame(animationFrameId);
+        window.addEventListener('resize',resizeCanvas);
+        resetButton.addEventListener('click',initSimulation);
+        pauseButton.addEventListener('click',()=>{
+            if (isPaused) {
+                resumeCoreSimulation();
+            } else {
+                pauseCoreSimulation();
             }
         });
         
-        // Speed and Max Organisms sliders
         if(speedSlider){speedSlider.addEventListener('input',()=>{gameSpeedMultiplier=parseFloat(speedSlider.value);speedValueEl.textContent=`${gameSpeedMultiplier.toFixed(1)}x`;});}
         if(maxOrganismsSlider){maxOrganismsSlider.addEventListener('input',()=>{maxOrganismsLimit=parseInt(maxOrganismsSlider.value);maxOrganismsValueEl.textContent=maxOrganismsLimit;});}
 
-        // Heatmap toggle buttons
-        toggleScavengerHeatmapButton.addEventListener('click',()=>{showScavengerHeatmap=!showScavengerHeatmap;updateHeatmapButtonStates();if(isPaused)draw();}); // Redraw if paused
+        toggleScavengerHeatmapButton.addEventListener('click',()=>{showScavengerHeatmap=!showScavengerHeatmap;updateHeatmapButtonStates();if(isPaused)draw();});
         togglePreyHeatmapButton.addEventListener('click',()=>{showPreyHeatmap=!showPreyHeatmap;updateHeatmapButtonStates();if(isPaused)draw();});
         togglePredatorHeatmapButton.addEventListener('click',()=>{showPredatorHeatmap=!showPredatorHeatmap;updateHeatmapButtonStates();if(isPaused)draw();});
         
-        // Canvas click listener (select organism or add food)
+        function displayOrganismInfo(org) {
+            infoOrganismIdEl.textContent = `ID: ...${org.id.slice(-6)} (Cells: ${org.cellCount})${org.isEgg ? ' - EGG' : ''}`;
+            infoGeneListEl.innerHTML = '';
+            org.genes.forEach((geneVal, index) => {
+                const geneEl = document.createElement('p');
+                geneEl.classList.add('gene-clickable'); // Make gene entry look clickable
+
+                let geneDisplayVal = geneVal.toFixed(3);
+                if (index === GENE_COMPLEXITY) geneDisplayVal = geneVal.toFixed(geneVal > 10 ? 1 : 3);
+                if (index === GENE_LITTERS) { // Custom display for litters
+                    let litterDesc = "1 child";
+                    if (org.isBreeder) { // Only show range if breeder
+                        if (geneVal >= LITTERS_GENE_THRESHOLD_TIER3) litterDesc = "1-8 children";
+                        else if (geneVal >= LITTERS_GENE_THRESHOLD_TIER2) litterDesc = "1-4 children";
+                        else if (geneVal >= LITTERS_GENE_THRESHOLD_TIER1) litterDesc = "1-2 children";
+                    }
+                     geneDisplayVal = `${geneVal.toFixed(3)} (${litterDesc})`;
+                }
+
+
+                let valueClass = 'gene-neutral';
+                if (GENE_THRESHOLDS.hasOwnProperty(index)) {
+                    const threshold = GENE_THRESHOLDS[index];
+                    if (geneVal >= threshold) { valueClass = 'gene-active'; } 
+                    else { valueClass = 'gene-inactive'; }
+                }
+                
+                geneEl.innerHTML = `<span class="font-medium text-gray-400">${GENE_NAMES[index] || 'Unknown Gene'}:</span> <span class="gene-value-display ${valueClass}">${geneDisplayVal}</span>`;
+                geneEl.addEventListener('click', () => handleGeneClick(index, org.genes[index], org.id));
+                infoGeneListEl.appendChild(geneEl);
+            });
+            organismInfoPanel.classList.remove('hidden');
+        }
+
+        function handleGeneClick(geneIndex, geneValue, currentOrganismId) {
+            let potentialTargets = [];
+            const isThresholdGene = GENE_THRESHOLDS.hasOwnProperty(geneIndex);
+
+            if (isThresholdGene) {
+                const threshold = GENE_THRESHOLDS[geneIndex];
+                potentialTargets = organisms.filter(o => 
+                    o.id !== currentOrganismId && !o.isEgg && 
+                    (o.genes[geneIndex] || 0) >= threshold
+                );
+            } else { // Value-based gene
+                const tolerance = (geneIndex === GENE_HUE) ? 0.05 : // Hue can have a slightly wider tolerance
+                                  (geneIndex === GENE_BASE_SIZE || geneIndex === GENE_COMPLEXITY || geneIndex === GENE_LITTERS) ? 0.1 : // Other floats
+                                  0.01; // Stricter for some potentially
+                potentialTargets = organisms.filter(o => 
+                    o.id !== currentOrganismId && !o.isEgg && 
+                    Math.abs((o.genes[geneIndex] || 0) - geneValue) < tolerance
+                );
+            }
+
+            if (potentialTargets.length > 0) {
+                const randomTarget = potentialTargets[Math.floor(Math.random() * potentialTargets.length)];
+                spectatingOrganismId = randomTarget.id;
+                displayOrganismInfo(randomTarget); // Update panel with new organism's info
+                // Camera will auto-track in the next update() due to spectatingOrganismId change
+            } else {
+                // Optional: Add a small temporary message in the panel if no match found
+                const noMatchMsg = document.createElement('p');
+                noMatchMsg.textContent = "No other matching organism found.";
+                noMatchMsg.className = "text-xs text-yellow-400 italic";
+                infoGeneListEl.appendChild(noMatchMsg);
+                setTimeout(() => { if(infoGeneListEl.contains(noMatchMsg)) infoGeneListEl.removeChild(noMatchMsg); }, 2000);
+            }
+        }
+
+
         canvas.addEventListener('click',(event)=>{
-            const worldCoords=screenToWorld(event.clientX,event.clientY); // Convert screen to world coordinates
+            // Prevent click if it's on the info panel itself (though panel is separate now)
+            if (organismInfoPanel.contains(event.target)) return;
+
+            const worldCoords=screenToWorld(event.clientX,event.clientY);
             let organismClicked=false;
-            // Check if an organism was clicked (iterate backwards for top-most organism)
             for(let i=organisms.length-1;i>=0;i--){ 
                 const org=organisms[i];
                 const dx=worldCoords.x-org.x;
                 const dy=worldCoords.y-org.y;
-                if(dx*dx+dy*dy<org.radius*org.radius){ // Simple circular click detection
+                if(dx*dx+dy*dy<org.radius*org.radius){
                     organismClicked=true;
-                    // Display organism info in modal
-                    infoOrganismIdEl.textContent=`Organism ID: ${org.id} (Cells: ${org.cellCount})${org.isEgg ? ' - EGG' : ''}`;
-                    infoGeneListEl.innerHTML=''; // Clear previous gene list
-                    org.genes.forEach((geneVal,index)=>{
-                        const geneEl=document.createElement('p');
-                        let geneDisplayVal=geneVal.toFixed(3);
-                        if(index===GENE_COMPLEXITY) geneDisplayVal=geneVal.toFixed(geneVal>10?1:3); // Different precision for complexity
-
-                        let valueClass = 'gene-neutral'; // Default class for gene value display
-                        // Apply active/inactive class based on threshold
-                        if (GENE_THRESHOLDS.hasOwnProperty(index)) {
-                            const threshold = GENE_THRESHOLDS[index];
-                            if (geneVal >= threshold) { valueClass = 'gene-active'; } 
-                            else { valueClass = 'gene-inactive'; }
-                        }
-                        
-                        geneEl.innerHTML=`<span class="font-medium text-gray-400">${GENE_NAMES[index]||'Unknown Gene'}:</span> <span class="${valueClass}">${geneDisplayVal}</span>`;
-                        infoGeneListEl.appendChild(geneEl);
-                    });
-                    organismInfoModal.classList.remove('hidden'); // Show modal
-                    pauseSimulation(); // Pause simulation while modal is open
+                    spectatingOrganismId = org.id; // Start spectating
+                    displayOrganismInfo(org);
                     break; 
                 }
             } 
-            if(!organismClicked){ // If no organism clicked, add food (husk) at click location
+            if(!organismClicked){
                 husks.push({id:'husk_manual_'+Date.now()+'_'+Math.random(),x:worldCoords.x,y:worldCoords.y,radius:HUSK_DEFAULT_RADIUS, cellCount: 1});
+                spectatingOrganismId = null; // Stop spectating if background is clicked
+                organismInfoPanel.classList.add('hidden');
             }
         }); 
         
-        // Canvas wheel listener for zooming
         canvas.addEventListener('wheel',(event)=>{
-            event.preventDefault(); // Prevent page scrolling
+            event.preventDefault();
             const rect=canvas.getBoundingClientRect();
             const mouseCanvasX=event.clientX-rect.left;const mouseCanvasY=event.clientY-rect.top;
-            // Calculate mouse position in world coordinates before zoom
             const worldMouseXBeforeZoom=(mouseCanvasX/viewScale)+viewOffsetX;
             const worldMouseYBeforeZoom=(mouseCanvasY/viewScale)+viewOffsetY;
             const zoomIntensity=0.1;
-            const direction=event.deltaY<0?1:-1; // Zoom in or out based on wheel direction
+            const direction=event.deltaY<0?1:-1;
             viewScale*=(1+direction*zoomIntensity);
-            clampViewOffset(); // Clamp scale
-            // Adjust offset to keep mouse position fixed relative to world during zoom
+            clampViewOffset();
             viewOffsetX=worldMouseXBeforeZoom-(mouseCanvasX/viewScale);
             viewOffsetY=worldMouseYBeforeZoom-(mouseCanvasY/viewScale);
-            clampViewOffset(); // Clamp offset
-            if(!isPaused||isPaused)draw(); // Redraw (even if paused, to show zoom change)
+            clampViewOffset();
+            if(!isPaused||isPaused)draw();
         });
         
-        // Functions to close organism info modal and resume simulation
-        function closeInfoModalAndResume(){
-            organismInfoModal.classList.add('hidden');
-            resumeSimulationIfModalClosed();
-        }
-        closeInfoModal.addEventListener('click',closeInfoModalAndResume);
-        closeInfoModalButton.addEventListener('click',closeInfoModalAndResume);
-        organismInfoModal.addEventListener('click',(event)=>{if(event.target===organismInfoModal)closeInfoModalAndResume();}); // Close if backdrop clicked
+        closeInfoPanelButton.addEventListener('click', () => {
+            organismInfoPanel.classList.add('hidden');
+            spectatingOrganismId = null; // Stop spectating
+        });
 
-        // "How to Play" modal listeners
         howToPlayButton.addEventListener('click', () => {
             howToPlayModal.classList.remove('hidden');
-            pauseSimulation(); 
+            pauseCoreSimulation(); 
         });
         function closeHowToPlayModalAndResume() {
             howToPlayModal.classList.add('hidden');
-            resumeSimulationIfModalClosed();
+            resumeCoreSimulation(); // Resume if it was paused by this modal
         }
         closeHowToPlayModal.addEventListener('click', closeHowToPlayModalAndResume);
         closeHowToPlayModalButton.addEventListener('click', closeHowToPlayModalAndResume);
-        howToPlayModal.addEventListener('click', (event) => { // Close if backdrop clicked
+        howToPlayModal.addEventListener('click', (event) => {
             if (event.target === howToPlayModal) {
                 closeHowToPlayModalAndResume();
             }
         });
 
-        // Pause simulation if tab becomes hidden, resume if it becomes visible and was paused by this
         document.addEventListener('visibilitychange', () => {
-            if (document.hidden) { // If tab is hidden
-                if (!isPaused) { // And simulation is running
-                    isPaused = true; // Pause it
-                    pauseButton.textContent = "Resume";
-                    if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            if (document.hidden) {
+                if (!isPaused) { // Only pause if it was running
+                    pauseCoreSimulation();
                 }
-            } else { // If tab becomes visible
-                // Resume only if it was paused by tab visibility (or modals, handled by resumeSimulationIfModalClosed)
-                if (isPaused && pauseButton.textContent === "Resume" && 
-                    organismInfoModal.classList.contains('hidden') && 
-                    howToPlayModal.classList.contains('hidden')) {
-                    isPaused = false;
-                    pauseButton.textContent = "Pause";
-                    lastTickTime = performance.now();
-                    if (animationFrameId) cancelAnimationFrame(animationFrameId);
-                    animationFrameId = requestAnimationFrame(gameLoop);
+            } else {
+                // Resume only if it was paused (e.g. by tab visibility or HowToPlay modal)
+                // and the HowToPlay modal is not the reason it should stay paused.
+                if (isPaused && pauseButton.textContent === "Resume" && howToPlayModal.classList.contains('hidden')) {
+                   resumeCoreSimulation();
                 }
             }
         });
 
-        // Initial setup
         resizeCanvas(); 
         initSimulation(); 
     </script>

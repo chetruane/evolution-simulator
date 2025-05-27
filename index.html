@@ -825,7 +825,7 @@
                 while (head < queue.length) {
                     const currentOrg = queue[head++]; network.push(currentOrg);
                     organisms.forEach(otherOrg => {
-                        if (otherOrg.isEgg || otherOrg.id === currentOrg.id || visitedMyceliumOrgs.has(otherOrg.id) || otherOrg.genes[GENE_MYCELIUM] < MYCELIUM_THRESHOLD || otherOrg.genes[GENE_FLAGELLA] >= 0.05) return;
+                        if (otherOrg.isEgg || otherOrg.id === currentOrg.id || visitedMyceliumOrgs.has(otherOrg.id) || otherOrg.genes[GENE_MYCELIUM] < MYCELIUM_THRESHOLD || otherOrg.genes[GENE_FLAGELLA] >= 0.01) return;
                         const dx = otherOrg.x - currentOrg.x; const dy = otherOrg.y - currentOrg.y; const distance = Math.sqrt(dx * dx + dy * dy);
                         if (distance < currentOrg.radius + otherOrg.radius + 12) { 
                             queue.push(otherOrg); visitedMyceliumOrgs.add(otherOrg.id); 

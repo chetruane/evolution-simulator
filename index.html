@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Evolution Simulator by Chet Ruane v4</title>
+    <title>Evolution Simulator by Chet Ruane v4.1</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { font-family: 'Inter', sans-serif; margin: 0; overflow: hidden; background-color: #111827; color: #e5e7eb; }
@@ -139,7 +139,7 @@
     <div id="howToPlayModal" class="fixed inset-0 modal-backdrop flex items-center justify-center hidden p-4 z-50">
         <div class="bg-gray-800 p-6 rounded-lg shadow-xl text-gray-200 max-w-lg w-full max-h-[80vh] overflow-y-auto">
             <div class="flex justify-between items-center mb-4">
-                <h3 class="text-xl font-semibold">How to Play - v4</h3>
+                <h3 class="text-xl font-semibold">How to Play - v4.1</h3>
                 <button id="closeHowToPlayModal" class="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
             </div>
             <div class="text-sm space-y-3">
@@ -156,7 +156,7 @@
                 <h4 class="font-semibold text-base mt-4">Environment:</h4>
                 <ul class="list-disc list-inside space-y-1 ml-2">
                     <li><strong>Sunny Salty Zone:</strong> The yellow zone is home to UV radiation that increases the chances of genetic mutations. Food is less nutritious in this area.</li>
-                    <li><strong>Husk Dispensers:</strong> Natural food sources that shoot out husks for scavengers to feast on.</li>
+                    <li><strong>Husk Dispensers:</strong> Natural food sources that shoot out husks for scavengers to feast on. Husks now collide with walls.</li>
                 </ul>
 
                 <h4 class="font-semibold text-base mt-4">Gene Definitions:</h4>
@@ -176,9 +176,9 @@
                     <li><strong>Plasmodium:</strong> Emits goo to detect husks.</li>
                     <li><strong>Wall Attraction:</strong> Stays near walls.</li>
                     <li><strong>Herd Mentality:</strong> Seeks other herd organisms.</li>
-                    <li><strong>Egg Layer:</strong> Lays eggs that hatch later. Eggs are now more egg-shaped!</li>
+                    <li><strong>Egg Layer:</strong> Lays eggs that hatch later. Egg size is now based on parent's size. Eggs are more egg-shaped!</li>
                     <li><strong>Dwelling:</strong> Returns to birth location when well-fed.</li>
-                    <li><strong>Mycelium:</strong> Forms networks, sharing resources.</li>
+                    <li><strong>Mycelium:</strong> Forms networks, sharing resources. New mycelial organisms are born with the network's average TTL.</li>
                     <li><strong>Pathfinding:</strong> Navigates around walls better.</li>
                     <li><strong>Starvation:</strong> Prioritizes food when life is critically low. If no food is visible, may enter a "mad dash".</li>
                     <li><strong>Curiosity:</strong> Larger strides during random movement.</li>
@@ -222,7 +222,6 @@
         const maxOrganismsSlider = document.getElementById('maxOrganismsSlider');
         const maxOrganismsValueEl = document.getElementById('maxOrganismsValue');
         const toggleScavengerHeatmapButton = document.getElementById('toggleScavengerHeatmap');
-        // Removed togglePreyHeatmapButton reference
         const togglePredatorHeatmapButton = document.getElementById('togglePredatorHeatmap');
         const evolutionPopupEl = document.getElementById('evolutionPopup');
 
@@ -233,7 +232,7 @@
         const SECONDARY_MUTATION_CHANCE = 2/3; 
         const GENE_MUTATION_STRENGTH = 0.5;
         const MINOR_HUE_SHIFT_STRENGTH = 0.4;
-        const MAX_GENES = 25; // Increased for Anticannibalism
+        const MAX_GENES = 25; 
         const INITIAL_GENE_COUNT = MAX_GENES; 
         const BASE_SPEED = 0.001;
         const FLAGELLA_SPEED_BONUS = 25; 
@@ -252,7 +251,7 @@
         const HUSK_DEFAULT_RADIUS = 3;
         const EATING_COOLDOWN_SECONDS = 6;
         const MIN_RADIUS_TO_EAT_BY_MULTICELLULAR = HUSK_DEFAULT_RADIUS;
-        const DUPLICATION_LIFESPAN_PENALTY_FACTOR = 0.75; // Higher dup rate = lower lifespan
+        const DUPLICATION_LIFESPAN_PENALTY_FACTOR = 0.75; 
 
         // --- Environment Parameters ---
         const NUM_CAVE_WALLS = 190;
@@ -277,11 +276,11 @@
         const PLASMODIUM_TINT_ALPHA = 0.15;
 
         // --- Heatmap / Aura Parameters ---
-        const HEATMAP_ALPHA = 0.08; // General alpha for heatmaps
-        const FEAR_AURA_ALPHA = 0.12; // Specific alpha for fear aura
+        const HEATMAP_ALPHA = 0.08; 
+        const FEAR_AURA_ALPHA = 0.12; 
         const HEATMAP_RADIUS_MULTIPLIER = 5;
         const HEATMAP_SCAVENGER_COLOR = `rgba(255, 215, 0, ${HEATMAP_ALPHA})`; 
-        const FEAR_AURA_COLOR = `rgba(65, 105, 225, ${FEAR_AURA_ALPHA})`; // Prey/Fear aura color
+        const FEAR_AURA_COLOR = `rgba(65, 105, 225, ${FEAR_AURA_ALPHA})`; 
         const HEATMAP_PREDATOR_COLOR = `rgba(220, 20, 60, ${HEATMAP_ALPHA})`;  
 
         // --- Gene-specific Parameters ---
@@ -293,9 +292,10 @@
         const EGG_LAYING_THRESHOLD = 0.6;
         const EGG_DURATION_SECONDS = 140;
         const EGG_LIFESPAN_FOOD_BONUS = 1.5;
-        const EGG_COLOR = 'rgba(240, 240, 220, 0.95)'; // Slightly off-white for eggs
-        const EGG_STRENGTH = 0.01;
-        const EGG_SHAPE_RATIO_Y = 1.3; // For elliptical egg shape (height = radius * ratio)
+        const EGG_COLOR = 'rgba(240, 240, 220, 0.95)'; 
+        const EGG_STRENGTH = 0.01; // Strength of the egg itself if attacked
+        const EGG_SHAPE_RATIO_Y = 1.3; 
+        const EGG_RADIUS_PARENT_RATIO = 0.6; // New: Egg radius as a factor of parent's radius
         const DWELLING_GENE_THRESHOLD = 0.6;
         const DWELLING_LIFESPAN_SATISFACTION_RATIO = 0.75;
         const DWELLING_FORCE = 0.04;
@@ -314,14 +314,14 @@
         const BASE_RANDOM_MOVEMENT_FACTOR = 0.6; 
         const MOTIVE_COMMITMENT_DURATION_SECONDS = 3;
         const ANTICANNIBALISM_THRESHOLD = 0.7;
-        const HUE_SIMILARITY_FOR_ANTICANNIBALISM = 0.03; // Max hue difference for anticannibalism to trigger
+        const HUE_SIMILARITY_FOR_ANTICANNIBALISM = 0.03; 
 
         // --- Breeding & Mating Ritual Parameters ---
         const BREEDING_THRESHOLD = 0.8;
         const HETEROGAMY_RANGE = 0.08; 
         const MATING_RITUAL_THRESHOLD = 0.7;
         const MATING_CONTACT_DURATION_SECONDS = 9;
-        const MIN_MATCHING_GENES_FOR_RITUAL = MAX_GENES - 4; // Adjusted for MAX_GENES
+        const MIN_MATCHING_GENES_FOR_RITUAL = MAX_GENES - 4; 
         const GENE_MATCHING_TOLERANCE = 0.1;
         const MATING_COOLDOWN_SECONDS = 120;
         const MATING_ATTRACTION_FORCE = 0.04;
@@ -344,14 +344,14 @@
         const GENE_BREEDING = 21;
         const GENE_MATING_RITUAL = 22;
         const GENE_LITTERS = 23; 
-        const GENE_ANTICANNIBALISM = 24; // New gene
+        const GENE_ANTICANNIBALISM = 24; 
 
         const GENE_NAMES = [
             "Hue", "BaseSize", "Dup.Rate", "Flagella", "Hostility", "SightRange",
             "Fear", "Predator", "Complexity", "Scavenger", "SaltTolerance", "SaltAvoidance",
             "Plasmodium", "WallAttract", "HerdMental", "EggLayer", "Dwelling",
             "Mycelium", "Pathfinding", "Starvation", "Curiosity",
-            "Breeding", "MatingRitual", "Litters", "AntiCannibal" // New gene name
+            "Breeding", "MatingRitual", "Litters", "AntiCannibal" 
         ];
 
         const GENE_THRESHOLDS = { 
@@ -360,12 +360,12 @@
             [GENE_SALT_AVOIDANCE]: 0.5, [GENE_PLASMODIUM]: PLASMODIUM_EXPRESSION_THRESHOLD,
             [GENE_WALL_ATTRACTION]: WALL_ATTRACTION_THRESHOLD, [GENE_HERD_MENTALITY]: HERD_MENTALITY_THRESHOLD,
             [GENE_EGG_LAYING]: EGG_LAYING_THRESHOLD, [GENE_DWELLING]: DWELLING_GENE_THRESHOLD,
-            [GENE_FLAGELLA]: 0.01, [GENE_MYCELIUM]: MYCELIUM_THRESHOLD,
+            [GENE_FLAGELLA]: 0.01, [GENE_MYCELIUM]: MYCELIUM_THRESHOLD, // Corrected typo here
             [GENE_PATHFINDING]: PATHFINDING_THRESHOLD, [GENE_STARVATION]: STARVATION_GENE_ACTIVATION_THRESHOLD,
             [GENE_CURIOSITY]: CURIOSITY_THRESHOLD,
             [GENE_BREEDING]: BREEDING_THRESHOLD,
             [GENE_MATING_RITUAL]: MATING_RITUAL_THRESHOLD,
-            [GENE_ANTICANNIBALISM]: ANTICANNIBALISM_THRESHOLD // New gene threshold
+            [GENE_ANTICANNIBALISM]: ANTICANNIBALISM_THRESHOLD 
         };
 
         // --- Simulation State ---
@@ -376,12 +376,12 @@
         let totalEvolutions = 0; let isPaused = false;
         let animationFrameId; let gameSpeedMultiplier = 1.0;
         let maxOrganismsLimit = 900; 
-        let showScavengerHeatmap = true; /* showPreyHeatmap removed */ let showPredatorHeatmap = true;  
+        let showScavengerHeatmap = true; let showPredatorHeatmap = true;  
         let viewScale = 1.0; let viewOffsetX = 0; let viewOffsetY = 0;
         let worldWidth, worldHeight;
         let myceliumConnections = new Set(); 
         let spectatingOrganismId = null; 
-        let evolvedGenesThisSimulation = new Set(); // For tracking first-time evolutions
+        let evolvedGenesThisSimulation = new Set(); 
 
         function resizeCanvas() { 
             const parent = canvas.parentElement;
@@ -397,16 +397,17 @@
             return Math.max(1, Math.floor(1 + (genes[GENE_COMPLEXITY] || 0) * 4));
         }
         
-        function createOrganism(x, y, genesOverride, parentBirthX, parentBirthY) {
+        function createOrganism(x, y, genesOverride, parentBirthX, parentBirthY, initialRadius = null) {
             const defaultGenes = Array(MAX_GENES).fill(0).map(() => Math.random() * 0.3 + 0.1);
             const newGenes = genesOverride ? [...genesOverride] : defaultGenes;
-            while (newGenes.length < MAX_GENES) { newGenes.push(Math.random() * 0.3 + 0.1); } // Ensure all genes exist
+            while (newGenes.length < MAX_GENES) { newGenes.push(Math.random() * 0.3 + 0.1); } 
             
             const organism = {
                 id: Math.random().toString(36).substr(2, 9) + Date.now(),
                 x, y, birthX: parentBirthX !== undefined ? parentBirthX : x, birthY: parentBirthY !== undefined ? parentBirthY : y,
                 genes: newGenes,
-                radius: 5, color: 'hsl(0, 100%, 50%)', actualDuplicationChance: DUPLICATION_CHANCE_PER_SECOND,
+                radius: 5, // Default, will be overridden by initialRadius for eggs or by interpretGenes for non-eggs
+                color: 'hsl(0, 100%, 50%)', actualDuplicationChance: DUPLICATION_CHANCE_PER_SECOND,
                 speed: BASE_SPEED, flagellaCount: 0, isHostile: false, sightRange: 0,
                 flees: false, hunts: false, isScavenging: false, seeksMate: false, 
                 targetOrganismId: null, targetHuskId: null, targetWallPoint: null, targetHerdCenter: null, targetDwellingPoint: null,
@@ -425,11 +426,15 @@
                 canPerformMatingRitual: false,
                 matingPartnerId: null, matingContactTimer: 0, matingCooldownTimer: 0,
                 litterSizeRange: [1, 1],
-                isAnticannibal: false, // New property
-                isMadDashing: false, madDashTargetX: 0, madDashTargetY: 0 // For starvation dash
+                isAnticannibal: false, 
+                isMadDashing: false, madDashTargetX: 0, madDashTargetY: 0 
             };
+
+            if (initialRadius !== null) { // Specifically for eggs, set it here before interpretGenes
+                organism.radius = initialRadius;
+            }
+
             organism.cellCount = calculateCellCount(organism.genes);
-            // Apply lifespan penalty based on duplication rate
             const dupRateFactor = 1 + ((organism.genes[GENE_DUP_RATE] || 0) * DUPLICATION_LIFESPAN_PENALTY_FACTOR);
             organism.initialTimeToLive = (LIFESPAN_PER_CELLCOUNT_SECONDS * organism.cellCount) / dupRateFactor;
             organism.timeToLive = organism.initialTimeToLive;
@@ -447,7 +452,9 @@
                 organism.canDwelling = false; organism.isDwelling = false;
                 organism.isMyceliumActive = false; organism.canPathfind = false; organism.isCurious = false;
                 organism.isBreeder = false; organism.isHeterogamous = false; organism.canPerformMatingRitual = false; 
-                organism.isAnticannibal = false; return; 
+                organism.isAnticannibal = false; 
+                // Radius for egg is set at creation and should not be recalculated here
+                return; 
             }
             
             organism.color = `hsl(${Math.floor((g[GENE_HUE] || 0) * 360)}, 70%, 60%)`;
@@ -455,7 +462,7 @@
             const minRadius = 3; const maxRadiusForGene = 8;
             let baseRadius = minRadius + ((g[GENE_BASE_SIZE] || 0) * (maxRadiusForGene - minRadius));
             const complexityFactor = 1 + (g[GENE_COMPLEXITY] || 0) * 1;
-            organism.radius = baseRadius * complexityFactor;
+            organism.radius = baseRadius * complexityFactor; // This calculates radius for non-eggs
             organism.radius = Math.min(organism.radius, MAX_RADIUS_CAP);
 
             const dupRateGene = g[GENE_DUP_RATE] === undefined ? 0.5 : g[GENE_DUP_RATE];
@@ -510,7 +517,7 @@
                                      breedingVal <= (BREEDING_THRESHOLD + HETEROGAMY_RANGE);
 
             organism.canPerformMatingRitual = organism.isBreeder && (g[GENE_MATING_RITUAL] || 0) > MATING_RITUAL_THRESHOLD;
-            organism.isAnticannibal = (g[GENE_ANTICANNIBALISM] || 0) > ANTICANNIBALISM_THRESHOLD; // Interpret new gene
+            organism.isAnticannibal = (g[GENE_ANTICANNIBALISM] || 0) > ANTICANNIBALISM_THRESHOLD; 
 
             const litterVal = g[GENE_LITTERS] || 0;
             if (organism.isBreeder) { 
@@ -528,12 +535,12 @@
             evolutionPopupEl.classList.add('show');
             setTimeout(() => {
                 evolutionPopupEl.classList.remove('show');
-            }, 3000); // Popup visible for 3 seconds
+            }, 3000); 
         }
 
         function applyMutationsAndHueShift(genesArray, isInSaltRegion) {
             const mutatedGenes = [...genesArray]; 
-            let evolutionOccurredThisStep = false; // Renamed for clarity
+            let evolutionOccurredThisStep = false; 
             let currentEvolutionChance = EVOLUTION_CHANCE_ON_REPRODUCTION;
             if (isInSaltRegion) {
                 currentEvolutionChance += SALT_REGION_MUTATION_BOOST * (1 - (mutatedGenes[GENE_SALT_TOLERANCE] || 0));
@@ -555,7 +562,7 @@
                             evolvedGenesThisSimulation.add(geneIndex);
                             showEvolutionPopup(GENE_NAMES[geneIndex]);
                         }
-                        return true; // Indicates a threshold was crossed for hue shift purposes
+                        return true; 
                     }
                 }
                 return false;
@@ -585,18 +592,74 @@
             }
             return { finalGenes: mutatedGenes, evolutionOccurredThisStep }; 
         }
+        
+        // Function to get average TTL of a mycelium network for a given organism
+        function getNetworkAverageTTL(sourceOrg, allOrganisms) {
+            if (!sourceOrg || sourceOrg.isEgg || !sourceOrg.isMyceliumActive || sourceOrg.genes[GENE_FLAGELLA] >= 0.01) {
+                return null; // Not eligible or no network
+            }
+
+            const network = [];
+            const queue = [sourceOrg];
+            const visitedInThisCheck = new Set([sourceOrg.id]);
+            let head = 0;
+            let totalLifespanInNetwork = 0;
+
+            while (head < queue.length) {
+                const currentOrg = queue[head++];
+                if (!currentOrg.isMyceliumActive || currentOrg.genes[GENE_FLAGELLA] >= 0.01) continue; // Ensure only valid mycelial orgs are processed
+
+                network.push(currentOrg);
+                totalLifespanInNetwork += currentOrg.timeToLive;
+
+                allOrganisms.forEach(otherOrg => {
+                    if (otherOrg.isEgg || otherOrg.id === currentOrg.id || visitedInThisCheck.has(otherOrg.id) ||
+                        !otherOrg.isMyceliumActive || otherOrg.genes[GENE_FLAGELLA] >= 0.01) return;
+
+                    const dx = otherOrg.x - currentOrg.x;
+                    const dy = otherOrg.y - currentOrg.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    if (distance < currentOrg.radius + otherOrg.radius + 12) { // Mycelium connection distance
+                        queue.push(otherOrg);
+                        visitedInThisCheck.add(otherOrg.id);
+                    }
+                });
+            }
+
+            if (network.length > 0) {
+                return totalLifespanInNetwork / network.length;
+            }
+            return null;
+        }
+
 
         function asexualReproduceOrganism(parent, offspringX, offspringY, isInSaltRegion) {
             if ((organisms.length + newOrganisms.length) >= maxOrganismsLimit) return null;
 
             totalAsexualDuplications++; 
             const { finalGenes } = applyMutationsAndHueShift(parent.genes, isInSaltRegion);
-            const offspring = createOrganism(offspringX, offspringY, finalGenes, parent.birthX, parent.birthY);
+            
+            let eggRadius = null;
+            if (parent.isEggLayer) {
+                eggRadius = parent.radius * EGG_RADIUS_PARENT_RATIO;
+            }
+            const offspring = createOrganism(offspringX, offspringY, finalGenes, parent.birthX, parent.birthY, parent.isEggLayer ? eggRadius : null);
+
             if (parent.isEggLayer) { 
                 offspring.isEgg = true; offspring.eggTimer = EGG_DURATION_SECONDS;
-                offspring.strength = EGG_STRENGTH; offspring.birthX = offspringX; offspring.birthY = offspringY;
+                offspring.birthX = offspringX; offspring.birthY = offspringY;
+                // Radius is already set by createOrganism if it's an egg
             }
-            interpretGenes(offspring);
+            interpretGenes(offspring); // Interpret genes for the offspring
+
+            // Adjust TTL if born into a mycelium network from a mycelial parent
+            if (offspring.isMyceliumActive && !offspring.isEgg && parent.isMyceliumActive) {
+                const parentNetworkAvgTTL = getNetworkAverageTTL(parent, organisms);
+                if (parentNetworkAvgTTL !== null) {
+                    offspring.initialTimeToLive = parentNetworkAvgTTL;
+                    offspring.timeToLive = parentNetworkAvgTTL;
+                }
+            }
             return offspring;
         }
 
@@ -623,13 +686,30 @@
                 const birthX = (parent1.x + parent2.x) / 2 + (Math.random() - 0.5) * (parent1.radius * 0.25);
                 const birthY = (parent1.y + parent2.y) / 2 + (Math.random() - 0.5) * (parent1.radius * 0.25);
 
-                const offspring = createOrganism(offspringX, offspringY, finalGenes, birthX, birthY); 
+                let eggRadius = null;
+                const layingParent = parent1.isEggLayer ? parent1 : (parent2.isEggLayer ? parent2 : null); // Determine which parent is the egg layer
+                if (layingParent) {
+                    eggRadius = layingParent.radius * EGG_RADIUS_PARENT_RATIO;
+                }
+                const offspring = createOrganism(offspringX, offspringY, finalGenes, birthX, birthY, (parent1.isEggLayer || parent2.isEggLayer) ? eggRadius : null); 
 
                 if (parent1.isEggLayer || parent2.isEggLayer) { 
                     offspring.isEgg = true; offspring.eggTimer = EGG_DURATION_SECONDS;
-                    offspring.strength = EGG_STRENGTH; offspring.birthX = offspringX; offspring.birthY = offspringY;
+                    offspring.birthX = offspringX; offspring.birthY = offspringY;
                 }
                 interpretGenes(offspring);
+
+                // Adjust TTL if born into a mycelium network
+                if (offspring.isMyceliumActive && !offspring.isEgg) {
+                    const referenceParentForMycelium = parent1.isMyceliumActive ? parent1 : (parent2.isMyceliumActive ? parent2 : null);
+                    if (referenceParentForMycelium) {
+                        const parentNetworkAvgTTL = getNetworkAverageTTL(referenceParentForMycelium, organisms);
+                        if (parentNetworkAvgTTL !== null) {
+                            offspring.initialTimeToLive = parentNetworkAvgTTL;
+                            offspring.timeToLive = parentNetworkAvgTTL;
+                        }
+                    }
+                }
                 newOffspringArray.push(offspring);
             }
             return newOffspringArray;
@@ -706,13 +786,13 @@
             pauseButton.textContent = "Pause"; viewScale = 1.0; viewOffsetX = 0; viewOffsetY = 0; 
             spectatingOrganismId = null; 
             organismInfoPanel.classList.add('hidden'); 
-            evolvedGenesThisSimulation.clear(); // Clear evolution tracking for new simulation
+            evolvedGenesThisSimulation.clear(); 
             
             gameSpeedMultiplier = parseFloat(speedSlider.value); 
             speedValueEl.textContent = `${gameSpeedMultiplier.toFixed(1)}x`;
             maxOrganismsLimit = parseInt(maxOrganismsSlider.value); 
             maxOrganismsValueEl.textContent = maxOrganismsLimit;
-            showScavengerHeatmap = true; /* showPreyHeatmap removed */ showPredatorHeatmap = true;  
+            showScavengerHeatmap = true; showPredatorHeatmap = true;  
             updateHeatmapButtonStates(); 
 
             if (!worldWidth) { worldWidth = canvas.width * 1.5; worldHeight = canvas.height * 1.5; }
@@ -730,12 +810,11 @@
             initialGenes[GENE_BREEDING] = 0.25; 
             initialGenes[GENE_MATING_RITUAL] = 0.2; 
             initialGenes[GENE_LITTERS] = 0.1; 
-            initialGenes[GENE_ANTICANNIBALISM] = 0.1; // Initial value for new gene
+            initialGenes[GENE_ANTICANNIBALISM] = 0.1; 
 
             const initialOrganism = createOrganism(worldWidth/2, worldHeight/2, initialGenes);
             interpretGenes(initialOrganism); organisms.push(initialOrganism);
 
-            // Start spectating the first organism
             if (organisms.length > 0) {
                 spectatingOrganismId = organisms[0].id;
                 displayOrganismInfo(organisms[0]);
@@ -804,8 +883,7 @@
                          infoOrganismTTLEl.innerHTML = `<strong>Time to Live:</strong> ${followedOrganism.timeToLive.toFixed(1)}s / ${followedOrganism.initialTimeToLive.toFixed(1)}s`;
                     }
                 } else { 
-                    // Spectated organism died or was removed
-                    spectatingOrganismId = null; // Will be reassigned if a nearby one is found
+                    spectatingOrganismId = null; 
                     organismInfoPanel.classList.add('hidden');
                     if (infoOrganismTTLEl) infoOrganismTTLEl.innerHTML = ''; 
                 }
@@ -817,15 +895,17 @@
             myceliumConnections.clear(); 
             const visitedMyceliumOrgs = new Set();
             organisms.forEach(org_myc => { 
-                if (org_myc.isEgg || org_myc.genes[GENE_MYCELIUM] < MYCELIUM_THRESHOLD || visitedMyceliumOrgs.has(org_myc.id) || org_myc.genes[GENE_FLAGELLA] >= 0.01) {
+                if (org_myc.isEgg || !org_myc.isMyceliumActive || visitedMyceliumOrgs.has(org_myc.id) || org_myc.genes[GENE_FLAGELLA] >= 0.01) {
                     return;
                 }
                 const network = []; const queue = [org_myc]; visitedMyceliumOrgs.add(org_myc.id);
                 let head = 0;
                 while (head < queue.length) {
-                    const currentOrg = queue[head++]; network.push(currentOrg);
+                    const currentOrg = queue[head++]; 
+                    if (!currentOrg.isMyceliumActive || currentOrg.genes[GENE_FLAGELLA] >= 0.01) continue; // Re-check for safety
+                    network.push(currentOrg);
                     organisms.forEach(otherOrg => {
-                        if (otherOrg.isEgg || otherOrg.id === currentOrg.id || visitedMyceliumOrgs.has(otherOrg.id) || otherOrg.genes[GENE_MYCELIUM] < MYCELIUM_THRESHOLD || otherOrg.genes[GENE_FLAGELLA] >= 0.01) return;
+                        if (otherOrg.isEgg || otherOrg.id === currentOrg.id || visitedMyceliumOrgs.has(otherOrg.id) || !otherOrg.isMyceliumActive || otherOrg.genes[GENE_FLAGELLA] >= 0.01) return;
                         const dx = otherOrg.x - currentOrg.x; const dy = otherOrg.y - currentOrg.y; const distance = Math.sqrt(dx * dx + dy * dy);
                         if (distance < currentOrg.radius + otherOrg.radius + 12) { 
                             queue.push(otherOrg); visitedMyceliumOrgs.add(otherOrg.id); 
@@ -854,13 +934,72 @@
                 }
             });
             husks.forEach(husk => { 
+                if (consumedHuskIds.has(husk.id)) return;
                 if (husk.isDispensed) { 
                     husk.x+=husk.vx*deltaTime; husk.y+=husk.vy*deltaTime; 
                     husk.vx*=0.98; husk.vy*=0.98; 
                     husk.timeToLiveDispensed-=deltaTime; 
-                    if(husk.timeToLiveDispensed<=0){consumedHuskIds.add(husk.id);} 
+                    if(husk.timeToLiveDispensed<=0){consumedHuskIds.add(husk.id); return;} 
+                    
+                    // Husk-Wall Collision
+                    walls.forEach(wall => {
+                        if (consumedHuskIds.has(husk.id)) return;
+
+                        const closestPoint = getClosestPointOnLineSegment(husk.x, husk.y, wall.x1, wall.y1, wall.x2, wall.y2);
+                        const dx_wall = husk.x - closestPoint.x;
+                        const dy_wall = husk.y - closestPoint.y;
+                        let distSq = dx_wall * dx_wall + dy_wall * dy_wall;
+                        const totalRadius = husk.radius + wall.thickness / 2;
+
+                        if (distSq < totalRadius * totalRadius && distSq > 0) {
+                            const dist = Math.sqrt(distSq);
+                            const overlap = totalRadius - dist;
+                            const pushX = (dx_wall / dist) * overlap;
+                            const pushY = (dy_wall / dist) * overlap;
+                            husk.x += pushX;
+                            husk.y += pushY;
+
+                            let wallNormalX = husk.x - closestPoint.x; // Normal from closest point to husk center (after push)
+                            let wallNormalY = husk.y - closestPoint.y;
+                            const magNormal = Math.sqrt(wallNormalX * wallNormalX + wallNormalY * wallNormalY);
+
+                            if (magNormal > 0) {
+                                wallNormalX /= magNormal;
+                                wallNormalY /= magNormal;
+                            } else { // Fallback if somehow magnitude is zero (e.g., husk center on wall segment point)
+                                let wallSegDx = wall.x2 - wall.x1;
+                                let wallSegDy = wall.y2 - wall.y1;
+                                wallNormalX = -wallSegDy; // Perpendicular to wall segment
+                                wallNormalY = wallSegDx;
+                                let tempMag = Math.sqrt(wallNormalX * wallNormalX + wallNormalY * wallNormalY);
+                                if (tempMag > 0) {
+                                    wallNormalX /= tempMag;
+                                    wallNormalY /= tempMag;
+                                    // Ensure normal points "out" of the wall relative to husk's approach if using segment normal
+                                     if ((husk.x - closestPoint.x) * wallNormalX + (husk.y - closestPoint.y) * wallNormalY < 0 ) {
+                                         wallNormalX *= -1; wallNormalY *= -1;
+                                    }
+                                } else { // Wall is a point, highly unlikely
+                                     husk.vx *= -0.6; husk.vy *= -0.6; return; // Simple bounce and exit for this wall
+                                }
+                            }
+                            
+                            const dotProduct = husk.vx * wallNormalX + husk.vy * wallNormalY;
+                            // Only reflect if moving towards the wall (dotProduct is negative)
+                            if (dotProduct < 0) { 
+                                 husk.vx -= 2 * dotProduct * wallNormalX;
+                                 husk.vy -= 2 * dotProduct * wallNormalY;
+                            }
+
+                            husk.vx *= 0.6; // Damping factor for husk bounce
+                            husk.vy *= 0.6;
+                        } else if (distSq === 0) { // Exactly on the wall line segment
+                            husk.x += (Math.random() - 0.5) * 0.1; // Nudge slightly
+                            husk.y += (Math.random() - 0.5) * 0.1;
+                        }
+                    });
+                    // Husk-World Boundary (still consumes)
                     if(husk.x-husk.radius<0||husk.x+husk.radius>worldWidth||husk.y-husk.radius<0||husk.y+husk.radius>worldHeight){consumedHuskIds.add(husk.id);} 
-                    walls.forEach(wall=>{const closestPoint=getClosestPointOnLineSegment(husk.x,husk.y,wall.x1,wall.y1,wall.x2,wall.y2); const dx=husk.x-closestPoint.x; const dy=husk.y-closestPoint.y; const distSq=dx*dx+dy*dy; const totalRadiusSq=(husk.radius+wall.thickness/2)**2; if(distSq<totalRadiusSq){consumedHuskIds.add(husk.id);}});
                 }
             });
 
@@ -874,9 +1013,13 @@
                     org.eggTimer -= deltaTime;
                     if (org.eggTimer <= 0) {
                         org.isEgg = false; org.birthX = org.x; org.birthY = org.y;
-                        // Recalculate initial Time To Live considering dup rate when hatching
                         const dupRateFactor = 1 + ((org.genes[GENE_DUP_RATE] || 0) * DUPLICATION_LIFESPAN_PENALTY_FACTOR);
-                        org.initialTimeToLive = (LIFESPAN_PER_CELLCOUNT_SECONDS * org.cellCount) / dupRateFactor;
+                        // If it was born from a mycelial network, its initialTimeToLive might have been set differently
+                        // We should respect that if it's already different from the genetic calculation
+                        if (org.initialTimeToLive === (LIFESPAN_PER_CELLCOUNT_SECONDS * org.cellCount) / dupRateFactor) { // Check if it's the default genetic TTL
+                             org.initialTimeToLive = (LIFESPAN_PER_CELLCOUNT_SECONDS * org.cellCount) / dupRateFactor; // Recalculate if still default
+                        }
+                        // If it was set by mycelium logic, it keeps that value. TimeToLive is then set from this initial.
                         org.timeToLive = org.initialTimeToLive; 
                         interpretGenes(org);
                     } else { 
@@ -894,11 +1037,10 @@
                     husks.push({id:'husk_'+org.id+'_'+Date.now(),x:org.x,y:org.y,radius:org.radius*0.5,cellCount:org.cellCount});
                     
                     if (wasSpectatingThisOne) { 
-                        spectatingOrganismId = null; // Clear it first
+                        spectatingOrganismId = null; 
                         organismInfoPanel.classList.add('hidden');
                         if (infoOrganismTTLEl) infoOrganismTTLEl.innerHTML = ''; 
                         
-                        // Find nearest living organism to spectate
                         let closestOrg = null;
                         let minDistSq = Infinity;
                         organisms.forEach(otherOrg => {
@@ -930,10 +1072,10 @@
                         org.committedMotive = null;
                         org.committedTargetId = null;
                         org.committedTargetPos = null;
-                        org.isMadDashing = false; // Stop mad dash if commitment ends
+                        org.isMadDashing = false; 
                     }
                 } else {
-                    org.isMadDashing = false; // Ensure mad dash stops if no commitment
+                    org.isMadDashing = false; 
                 }
 
                 org.plasmodiumTargetHuskId = null; 
@@ -1054,13 +1196,12 @@
                 org.targetOrganismId = null; org.targetHuskId = null; org.targetWallPoint = null;
                 org.targetHerdCenter = null; org.targetDwellingPoint = null; 
                 org.targetPoint = null;
-                // org.isMadDashing is handled by commitment timer or when new target is found
 
-                interpretGenes(org); // Re-interpret genes to update derived properties like isAnticannibal
+                interpretGenes(org); 
 
                 if (org.commitmentTimer <= 0) { 
                     org.committedMotive = null; org.committedTargetId = null; org.committedTargetPos = null; org.targetMateId = null; 
-                    org.isMadDashing = false; // Reset mad dash if commitment ends
+                    org.isMadDashing = false; 
 
                     let bestPrey = null; let strongestThreat = null; let potentialScavengerThreat = null;
                     let bestHuskTarget = null; let herdMembers = []; let bestMateTarget = null;
@@ -1075,11 +1216,9 @@
                                 const canWinEngagement = (org.strength > other.strength) || (org.strength === other.strength && org.radius > other.radius);
                                 const isEdibleByMulticell = !(org.cellCount > 1 && other.cellCount === 1 && other.radius < MIN_RADIUS_TO_EAT_BY_MULTICELLULAR);
                                 
-                                // Anticannibalism check for prey selection
                                 let isAnticannibalProtected = false;
-                                if (org.isAnticannibal && other.isAnticannibal) { // Both need the gene active
+                                if (org.isAnticannibal && other.isAnticannibal) { 
                                     const hueDiff = Math.abs((org.genes[GENE_HUE] || 0) - (other.genes[GENE_HUE] || 0));
-                                    // Handle hue wrapping around 0 and 1
                                     if (hueDiff > 0.5) { 
                                         isAnticannibalProtected = (1 - hueDiff) < HUE_SIMILARITY_FOR_ANTICANNIBALISM;
                                     } else {
@@ -1157,13 +1296,13 @@
                         } else if (bestPrey && org.isHostile) {
                             org.hunts = true; org.targetOrganismId = bestPrey.id; org.targetPoint = { x: bestPrey.x, y: bestPrey.y };
                             org.committedMotive = 'hunt_organism'; org.committedTargetId = bestPrey.id; org.commitmentTimer = MOTIVE_COMMITMENT_DURATION_SECONDS;
-                        } else { // No visible food, initiate mad dash
+                        } else { 
                             org.isMadDashing = true;
                             const angle = Math.random() * Math.PI * 2;
-                            org.madDashTargetX = org.x + Math.cos(angle) * worldWidth; // Dash far
+                            org.madDashTargetX = org.x + Math.cos(angle) * worldWidth; 
                             org.madDashTargetY = org.y + Math.sin(angle) * worldHeight;
                             org.targetPoint = { x: org.madDashTargetX, y: org.madDashTargetY };
-                            org.committedMotive = 'mad_dash_starvation'; org.commitmentTimer = MOTIVE_COMMITMENT_DURATION_SECONDS * 1.5; // Longer commitment for dash
+                            org.committedMotive = 'mad_dash_starvation'; org.commitmentTimer = MOTIVE_COMMITMENT_DURATION_SECONDS * 1.5; 
                         }
                     }
                     else if (strongestThreat) {
@@ -1210,7 +1349,7 @@
                         org.committedMotive = 'herd'; org.committedTargetPos = { x: herdCenterX, y: herdCenterY }; org.commitmentTimer = MOTIVE_COMMITMENT_DURATION_SECONDS;
                     }
 
-                } else { // Has commitment
+                } else { 
                     if (org.committedMotive === 'flee' || org.committedMotive === 'hunt_organism') { 
                         const target = organisms.find(o => o.id === org.committedTargetId && !deadOrConsumedOrganismIds.has(o.id));
                         if (target) {
@@ -1218,8 +1357,7 @@
                             if (org.committedMotive === 'flee') {
                                 org.flees = true;
                                 org.targetPoint = { x: org.x + (org.x - target.x), y: org.y + (org.y - target.y) };
-                            } else { // hunt_organism
-                                // Re-check anticannibalism if hunting committed target
+                            } else { 
                                 let isAnticannibalProtectedTarget = false;
                                 if (org.isAnticannibal && target.isAnticannibal) {
                                      const hueDiff = Math.abs((org.genes[GENE_HUE] || 0) - (target.genes[GENE_HUE] || 0));
@@ -1227,7 +1365,7 @@
                                      else { isAnticannibalProtectedTarget = hueDiff < HUE_SIMILARITY_FOR_ANTICANNIBALISM; }
                                 }
                                 if (isAnticannibalProtectedTarget) {
-                                    org.commitmentTimer = 0; // Break commitment if target becomes protected
+                                    org.commitmentTimer = 0; 
                                 } else {
                                     org.hunts = true;
                                     org.targetPoint = { x: target.x, y: target.y };
@@ -1258,11 +1396,10 @@
                     else if (org.committedMotive === 'mad_dash_starvation') {
                         org.isMadDashing = true;
                         org.targetPoint = { x: org.madDashTargetX, y: org.madDashTargetY };
-                        // Check if reached mad dash target (or close enough) to pick a new one if still starving and no food
                         const dxDash = org.madDashTargetX - org.x;
                         const dyDash = org.madDashTargetY - org.y;
-                        if (dxDash * dxDash + dyDash * dyDash < (org.radius * 5)**2) { // Reached vicinity
-                             org.commitmentTimer = 0; // Will re-evaluate next tick
+                        if (dxDash * dxDash + dyDash * dyDash < (org.radius * 5)**2) { 
+                             org.commitmentTimer = 0; 
                         }
                     }
                 }
@@ -1310,10 +1447,10 @@
                         const dx_wall = org.x - closestPoint.x; const dy_wall = org.y - closestPoint.y; const distance_wall = Math.sqrt(dx_wall * dx_wall + dy_wall * dy_wall);
                         if (distance_wall < wallDetectionRadius + wall.thickness / 2) {
                             const normX = dx_wall / distance_wall; const normY = dy_wall / distance_wall;
-                            if (org.flees || wantsToLeaveSalt || org.isMadDashing) { // Mad dash also avoids walls
+                            if (org.flees || wantsToLeaveSalt || org.isMadDashing) { 
                                 wallInfluenceX += normX * WALL_AVOIDANCE_FORCE; wallInfluenceY += normY * WALL_AVOIDANCE_FORCE;
-                                if (org.isMadDashing && distance_wall < org.radius + wall.thickness / 2 + 5) { // Hit wall during mad dash
-                                    org.commitmentTimer = 0; // Force re-evaluation to pick new dash direction
+                                if (org.isMadDashing && distance_wall < org.radius + wall.thickness / 2 + 5) { 
+                                    org.commitmentTimer = 0; 
                                 }
                             } else if (org.hunts || org.isScavenging) {
                                 let targetPathX, targetPathY;
@@ -1369,7 +1506,6 @@
                             else { 
                                 const isEdibleByMulticell=!(org.cellCount>1&&other.cellCount===1&&other.radius<MIN_RADIUS_TO_EAT_BY_MULTICELLULAR); 
                                 
-                                // Anticannibalism check for eating
                                 let isProtectedByAnticannibalism = false;
                                 if (org.isAnticannibal && other.isAnticannibal) {
                                     const hueDiff = Math.abs((org.genes[GENE_HUE] || 0) - (other.genes[GENE_HUE] || 0));
@@ -1386,7 +1522,7 @@
                                 const wasSpectatingEatenOne = (other.id === spectatingOrganismId);
                                 deadOrConsumedOrganismIds.add(other.id);
                                 if (wasSpectatingEatenOne) { 
-                                    spectatingOrganismId = null; // Will be handled by the main death check loop
+                                    spectatingOrganismId = null; 
                                     organismInfoPanel.classList.add('hidden');
                                     if (infoOrganismTTLEl) infoOrganismTTLEl.innerHTML = ''; 
                                 }
@@ -1397,12 +1533,12 @@
                                 if (org.isEggLayer) lifespanGain *= EGG_LIFESPAN_FOOD_BONUS;
                                 org.timeToLive+=lifespanGain;
                                 org.eatCooldown=EATING_COOLDOWN_SECONDS;
-                                interpretGenes(org); // Re-interpret after eating
+                                interpretGenes(org); 
                             }
                         }
                     });
                 }
-                else if(org.eatCooldown<=0){ // Non-hostile eating (husks)
+                else if(org.eatCooldown<=0){ 
                     husks.forEach(husk=>{
                         if(consumedHuskIds.has(husk.id))return;
                         const dx=husk.x-org.x;const dy=husk.y-org.y;const distance=Math.sqrt(dx*dx+dy*dy);
@@ -1459,15 +1595,14 @@
             
             ctx.strokeStyle='#555e70'; 
             ctx.lineWidth=WALL_THICKNESS; 
-            ctx.lineCap = 'round'; // Rounded wall ends
+            ctx.lineCap = 'round'; 
             walls.forEach(wall=>{ctx.beginPath();ctx.moveTo(wall.x1,wall.y1);ctx.lineTo(wall.x2,wall.y2);ctx.stroke();}); 
-            ctx.lineCap = 'butt'; // Reset line cap for other drawings if needed
+            ctx.lineCap = 'butt'; 
             
             ctx.fillStyle='#4a5568'; 
             foodDispensers.forEach(dispenser=>{ctx.beginPath();ctx.arc(dispenser.x,dispenser.y,dispenser.radius,0,Math.PI*2);ctx.fill();}); 
             
             if(showScavengerHeatmap){ctx.fillStyle=HEATMAP_SCAVENGER_COLOR;organisms.forEach(org=>{if(org.isScavenger && !org.isEgg){ctx.beginPath();ctx.arc(org.x,org.y,org.radius*HEATMAP_RADIUS_MULTIPLIER,0,Math.PI*2);ctx.fill();}}); } 
-            // Always show fear aura if fleeing
             ctx.fillStyle=FEAR_AURA_COLOR; organisms.forEach(org=>{if(org.flees && !org.isEgg){ctx.beginPath();ctx.arc(org.x,org.y,org.radius*HEATMAP_RADIUS_MULTIPLIER,0,Math.PI*2);ctx.fill();}}); 
             if(showPredatorHeatmap){ctx.fillStyle=HEATMAP_PREDATOR_COLOR;organisms.forEach(org=>{if(org.isHostile && !org.isEgg){ctx.beginPath();ctx.arc(org.x,org.y,org.radius*HEATMAP_RADIUS_MULTIPLIER,0,Math.PI*2);ctx.fill();}}); } 
             
@@ -1494,11 +1629,10 @@
 
                 if (org.isEgg) {
                     ctx.beginPath();
-                    // Draw ellipse for egg shape: ctx.ellipse(x, y, radiusX, radiusY, rotation, startAngle, endAngle);
                     ctx.ellipse(org.x, org.y, org.radius, org.radius * EGG_SHAPE_RATIO_Y, 0, 0, Math.PI * 2);
                     ctx.fill();
                 }
-                else if(!org.cellCount||org.cellCount<=0){ // Should not happen if not egg, but good fallback
+                else if(!org.cellCount||org.cellCount<=0){ 
                     ctx.beginPath();ctx.arc(org.x,org.y,org.radius,0,Math.PI*2);ctx.fill(); 
                 } 
                 else{
@@ -1514,7 +1648,7 @@
                     if(org.sightRange>0){ctx.fillStyle='rgba(255,255,255,0.8)';const eyeSize=Math.max(1.5,org.radius*0.25);const moveAngle=Math.atan2(org.vy,org.vx);ctx.beginPath();ctx.arc(org.x+Math.cos(moveAngle)*org.radius*0.5,org.y+Math.sin(moveAngle)*org.radius*0.5,eyeSize,0,Math.PI*2);ctx.fill();}} 
                 if (org.id === spectatingOrganismId) {
                     ctx.strokeStyle = 'rgba(59, 130, 246, 0.9)'; 
-                    ctx.lineWidth = 2 / viewScale; // Make stroke width independent of zoom for spectator ring
+                    ctx.lineWidth = 2 / viewScale; 
                     ctx.beginPath();
                     ctx.arc(org.x, org.y, org.radius + 4 / viewScale, 0, Math.PI * 2);
                     ctx.stroke();
@@ -1531,7 +1665,6 @@
         
         function updateHeatmapButtonStates() {
             toggleScavengerHeatmapButton.classList.toggle('heatmap-button-active', showScavengerHeatmap);
-            // togglePreyHeatmapButton removed
             togglePredatorHeatmapButton.classList.toggle('heatmap-button-active', showPredatorHeatmap);
         }
         
@@ -1567,11 +1700,10 @@
         if(maxOrganismsSlider){maxOrganismsSlider.addEventListener('input',()=>{maxOrganismsLimit=parseInt(maxOrganismsSlider.value);maxOrganismsValueEl.textContent=maxOrganismsLimit;});}
 
         toggleScavengerHeatmapButton.addEventListener('click',()=>{showScavengerHeatmap=!showScavengerHeatmap;updateHeatmapButtonStates();if(isPaused)draw();});
-        // togglePreyHeatmapButton listener removed
         togglePredatorHeatmapButton.addEventListener('click',()=>{showPredatorHeatmap=!showPredatorHeatmap;updateHeatmapButtonStates();if(isPaused)draw();});
         
         function displayOrganismInfo(org) {
-            if (!org) { // Safety check
+            if (!org) { 
                 organismInfoPanel.classList.add('hidden');
                 spectatingOrganismId = null;
                 if (infoOrganismTTLEl) infoOrganismTTLEl.innerHTML = '';
@@ -1615,7 +1747,7 @@
         }
 
         function handleGeneClick(geneIndex, geneValue, currentOrganismId) {
-            if (geneValue === undefined || geneValue === null) return; // Don't search based on undefined gene
+            if (geneValue === undefined || geneValue === null) return; 
 
             let potentialTargets = [];
             const isThresholdGene = GENE_THRESHOLDS.hasOwnProperty(geneIndex);
@@ -1645,7 +1777,7 @@
                 noMatchMsg.textContent = "No other matching organism found.";
                 noMatchMsg.className = "text-xs text-yellow-400 italic";
                 if(infoGeneListEl.lastChild && infoGeneListEl.lastChild.textContent === "No other matching organism found.") {
-                    // Avoid spamming the message
+                    // Avoid spamming
                 } else {
                     infoGeneListEl.appendChild(noMatchMsg);
                     setTimeout(() => { if(infoGeneListEl.contains(noMatchMsg)) infoGeneListEl.removeChild(noMatchMsg); }, 2000);
@@ -1663,12 +1795,8 @@
                 const org=organisms[i];
                 const dx=worldCoords.x-org.x;
                 const dy=worldCoords.y-org.y;
-                if(dx*dx+dy*dy<org.radius*org.radius){ // Basic circle click detection
-                    // More precise check for egg shape if it's an egg
+                if(dx*dx+dy*dy<org.radius*org.radius){ 
                     if (org.isEgg) {
-                        // Ellipse click detection: (x-h)^2/a^2 + (y-k)^2/b^2 <= 1
-                        // (h,k) is center (org.x, org.y)
-                        // a is radiusX (org.radius), b is radiusY (org.radius * EGG_SHAPE_RATIO_Y)
                         const termX = (worldCoords.x - org.x) ** 2 / (org.radius ** 2);
                         const termY = (worldCoords.y - org.y) ** 2 / ((org.radius * EGG_SHAPE_RATIO_Y) ** 2);
                         if (termX + termY <= 1) {
@@ -1702,17 +1830,15 @@
             const zoomIntensity=0.1;
             const direction=event.deltaY<0?1:-1;
             viewScale*=(1+direction*zoomIntensity);
-            clampViewOffset(); // Clamps scale first
+            clampViewOffset(); 
             viewOffsetX=worldMouseXBeforeZoom-(mouseCanvasX/viewScale);
             viewOffsetY=worldMouseYBeforeZoom-(mouseCanvasY/viewScale);
-            clampViewOffset(); // Then clamps offset
+            clampViewOffset(); 
             if(!isPaused||isPaused)draw();
         });
         
         closeInfoPanelButton.addEventListener('click', () => {
             organismInfoPanel.classList.add('hidden');
-            // Don't nullify spectatingOrganismId here, let clicks on canvas do that
-            // This allows the camera to stay on the organism even if panel is closed
         });
 
         howToPlayButton.addEventListener('click', () => {

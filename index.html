@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Evolution Simulator by Chet Ruane v4.1</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Evolution Simulator by Chet Ruane v4.2</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { font-family: 'Inter', sans-serif; margin: 0; overflow: hidden; background-color: #111827; color: #e5e7eb; }
@@ -11,6 +11,7 @@
             display: block;
             background-color: #1f2937; /* Tailwind gray-800 */
             border: 1px solid #374151; /* Tailwind gray-700 */
+            touch-action: none; /* Prevents default touch behaviors like scrolling */
         }
         #controls {
             background-color: #374151; /* Tailwind gray-700 */
@@ -139,19 +140,32 @@
     <div id="howToPlayModal" class="fixed inset-0 modal-backdrop flex items-center justify-center hidden p-4 z-50">
         <div class="bg-gray-800 p-6 rounded-lg shadow-xl text-gray-200 max-w-lg w-full max-h-[80vh] overflow-y-auto">
             <div class="flex justify-between items-center mb-4">
-                <h3 class="text-xl font-semibold">How to Play - v4.1</h3>
+                <h3 class="text-xl font-semibold">How to Play - v4.2</h3>
                 <button id="closeHowToPlayModal" class="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
             </div>
             <div class="text-sm space-y-3">
                 <p>Welcome to the Evolution Simulator! Observe simple organisms as they evolve.</p>
                 
-                <h4 class="font-semibold text-base mt-4">Controls:</h4>
+                <h4 class="font-semibold text-base mt-4">Controls (Desktop):</h4>
                 <ul class="list-disc list-inside space-y-1 ml-2">
                     <li><strong>Click on an organism:</strong> Spectate it & view genetic makeup in the side panel. Camera will follow.</li>
                     <li><strong>Click on empty space:</strong> Adds food & stops spectating.</li>
                     <li><strong>Mouse Wheel:</strong> Zoom.</li>
-                    <li><strong>Genes in Side Panel:</strong> Click a gene to find and spectate another organism with similar genetic traits.</li>
                 </ul>
+
+                <h4 class="font-semibold text-base mt-4">Controls (Mobile):</h4>
+                <ul class="list-disc list-inside space-y-1 ml-2">
+                    <li><strong>Tap on an organism:</strong> Spectate it.</li>
+                    <li><strong>Tap on empty space:</strong> Adds food.</li>
+                    <li><strong>One-finger swipe:</strong> Pan the camera.</li>
+                    <li><strong>Two-finger pinch:</strong> Zoom in and out.</li>
+                </ul>
+
+                <h4 class="font-semibold text-base mt-4">Shared Controls:</h4>
+                 <ul class="list-disc list-inside space-y-1 ml-2">
+                    <li><strong>Genes in Side Panel:</strong> Click/Tap a gene to find and spectate another organism with similar genetic traits.</li>
+                </ul>
+
 
                 <h4 class="font-semibold text-base mt-4">Environment:</h4>
                 <ul class="list-disc list-inside space-y-1 ml-2">
@@ -383,13 +397,19 @@
         let spectatingOrganismId = null; 
         let evolvedGenesThisSimulation = new Set(); 
 
+        // --- Mobile Touch State ---
+        let initialPinchDistance = null;
+        let lastPanPoint = null;
+        let isDragging = false;
+
         function resizeCanvas() { 
             const parent = canvas.parentElement;
             canvas.width = parent.clientWidth;
             canvas.height = parent.clientHeight;
+            // Set a fixed large world size to ensure a good experience on all devices
             if (!worldWidth || !worldHeight) {
-                 worldWidth = canvas.width * 1.5; 
-                 worldHeight = canvas.height * 1.5;
+                 worldWidth = 3000; 
+                 worldHeight = 2250;
             }
             clampViewOffset();
         }
@@ -795,7 +815,10 @@
             showScavengerHeatmap = true; showPredatorHeatmap = true;  
             updateHeatmapButtonStates(); 
 
-            if (!worldWidth) { worldWidth = canvas.width * 1.5; worldHeight = canvas.height * 1.5; }
+            if (!worldWidth) { 
+                worldWidth = 3000; 
+                worldHeight = 2250;
+            }
             generateEnvironment();
             
             const initialGenes = Array(MAX_GENES).fill(0); 
@@ -1787,7 +1810,7 @@
 
 
         canvas.addEventListener('click',(event)=>{
-            if (organismInfoPanel.contains(event.target)) return;
+            if (organismInfoPanel.contains(event.target) || isDragging) return;
 
             const worldCoords=screenToWorld(event.clientX,event.clientY);
             let organismClicked=false;
@@ -1837,6 +1860,73 @@
             if(!isPaused||isPaused)draw();
         });
         
+        // --- TOUCH CONTROLS ---
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (e.touches.length === 1) {
+                lastPanPoint = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+                isDragging = false; 
+            } else if (e.touches.length === 2) {
+                initialPinchDistance = Math.hypot(
+                    e.touches[0].clientX - e.touches[1].clientX,
+                    e.touches[0].clientY - e.touches[1].clientY
+                );
+                lastPanPoint = null; // Stop panning when pinching
+            }
+        }, { passive: false });
+
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            isDragging = true; // If we move, it's a drag, not a click
+            // Panning
+            if (e.touches.length === 1 && lastPanPoint) {
+                const dx = (e.touches[0].clientX - lastPanPoint.x) / viewScale;
+                const dy = (e.touches[0].clientY - lastPanPoint.y) / viewScale;
+                viewOffsetX -= dx;
+                viewOffsetY -= dy;
+                lastPanPoint = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+                clampViewOffset();
+                if (isPaused) draw();
+            } 
+            // Zooming
+            else if (e.touches.length === 2 && initialPinchDistance) {
+                const newPinchDistance = Math.hypot(
+                    e.touches[0].clientX - e.touches[1].clientX,
+                    e.touches[0].clientY - e.touches[1].clientY
+                );
+                
+                const rect = canvas.getBoundingClientRect();
+                const touchMidpointX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
+                const touchMidpointY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
+
+                const worldPointXBeforeZoom = (touchMidpointX / viewScale) + viewOffsetX;
+                const worldPointYBeforeZoom = (touchMidpointY / viewScale) + viewOffsetY;
+
+                viewScale *= newPinchDistance / initialPinchDistance;
+                clampViewOffset();
+
+                viewOffsetX = worldPointXBeforeZoom - (touchMidpointX / viewScale);
+                viewOffsetY = worldPointYBeforeZoom - (touchMidpointY / viewScale);
+                clampViewOffset();
+                
+                initialPinchDistance = newPinchDistance;
+                if (isPaused) draw();
+            }
+        }, { passive: false });
+
+        canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            if (e.touches.length < 2) {
+                initialPinchDistance = null;
+            }
+            if (e.touches.length < 1) {
+                lastPanPoint = null;
+                 // Delay resetting isDragging to allow the click event to check it
+                setTimeout(() => { isDragging = false; }, 100);
+            }
+        }, { passive: false });
+
+
         closeInfoPanelButton.addEventListener('click', () => {
             organismInfoPanel.classList.add('hidden');
         });
